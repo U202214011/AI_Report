@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Tuple, Optional
 import io
 import base64
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from dateutil import parser as dateparser
 from dateutil.relativedelta import relativedelta
 import matplotlib.pyplot as plt
@@ -14,7 +14,6 @@ from utils import get_db_connection
 # ---------- 时间表达式 ----------
 
 def invoice_datetime_expr() -> str:
-    # 直接使用数据库中的 DATETIME 字段（你的数据是标准格式）
     return "i.InvoiceDate"
 
 def granularity_expression(gran: str) -> str:
@@ -37,17 +36,20 @@ def metric_sql(metric: str) -> str:
     if metric == 'order_count':
         return "COUNT(DISTINCT i.InvoiceId) AS value"
     if metric == 'avg_order_value':
-        return "IFNULL(SUM(i.Total) / COUNT(DISTINCT i.InvoiceId), 0) AS value"
+        return "IFNULL(SUM(i.Total) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
     raise ValueError(f"unknown metric: {metric}")
 
+# 维度查询（join 到明细表）必须避免重复计数
+# - sales_amount 用 il.UnitPrice * il.Quantity
+# - order_count 用 DISTINCT invoice
+# - avg_order_value 用分子(行金额和)/分母(发票数)
 def metric_sql_with_lines(metric: str) -> str:
-    # 仅用于维度聚合（包含 InvoiceLine 的查询）
     if metric == 'sales_amount':
         return "IFNULL(SUM(il.UnitPrice * il.Quantity), 0) AS value"
     if metric == 'order_count':
         return "COUNT(DISTINCT i.InvoiceId) AS value"
     if metric == 'avg_order_value':
-        return "IFNULL(SUM(il.UnitPrice * il.Quantity) / COUNT(DISTINCT i.InvoiceId), 0) AS value"
+        return "IFNULL(SUM(il.UnitPrice * il.Quantity) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
     raise ValueError(f"unknown metric: {metric}")
 
 # ---------- 维度表达式 ----------
@@ -165,6 +167,23 @@ def build_period_range(granularity: str, since=None, until=None) -> List[str]:
         current = current + step
     return periods
 
+def _normalize_since_until(since: Any, until: Any) -> Tuple[Optional[str], Optional[str]]:
+    s_dt = _parse_datetime_input(since) if since else None
+    u_dt = _parse_datetime_input(until) if until else None
+
+    if s_dt:
+        s_dt = datetime.combine(s_dt.date(), time.min)
+    if u_dt:
+        u_dt = datetime.combine(u_dt.date(), time.max)
+
+    s = s_dt.strftime("%Y-%m-%d %H:%M:%S") if s_dt else None
+    u = u_dt.strftime("%Y-%m-%d %H:%M:%S") if u_dt else None
+    return s, u
+
+def normalize_time_range_for_debug(since: Any, until: Any) -> Dict[str, Optional[str]]:
+    s, u = _normalize_since_until(since, until)
+    return {"since": s, "until": u}
+
 # ---------- 基础执行 ----------
 
 def _normalize_value(value: Any) -> Any:
@@ -199,12 +218,16 @@ def build_period_trend(metric: str, granularity: str, since=None, until=None) ->
     params = []
     where = []
     dt = invoice_datetime_expr()
-    if since:
+
+    since_norm, until_norm = _normalize_since_until(since, until)
+
+    if since_norm:
         where.append(f"{dt} >= %s")
-        params.append(since)
-    if until:
+        params.append(since_norm)
+    if until_norm:
         where.append(f"{dt} <= %s")
-        params.append(until)
+        params.append(until_norm)
+
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     period_expr = granularity_expression(granularity)
 
@@ -222,12 +245,16 @@ def build_dimension_trend(metric: str, granularity: str, dimension: str, since=N
     params = []
     where = []
     dt = invoice_datetime_expr()
-    if since:
+
+    since_norm, until_norm = _normalize_since_until(since, until)
+
+    if since_norm:
         where.append(f"{dt} >= %s")
-        params.append(since)
-    if until:
+        params.append(since_norm)
+    if until_norm:
         where.append(f"{dt} <= %s")
-        params.append(until)
+        params.append(until_norm)
+
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     period_expr = granularity_expression(granularity)
     dim_expr, dim_alias = dimension_expression(dimension)
@@ -246,11 +273,11 @@ def build_dimension_trend(metric: str, granularity: str, dimension: str, since=N
     sql = f"""
     SELECT {period_expr} AS period,
            {dim_expr} AS {dim_alias},
-           {metric_sql(metric)}
+           {metric_sql_with_lines(metric)}
     {from_clause}
     {where_sql}
     GROUP BY period, {dim_alias}
-    ORDER BY period ASC
+    ORDER BY period ASC, value DESC
     """
     return sql, params
 
@@ -267,7 +294,6 @@ def _encode_png(fig) -> str:
 def parse_period(granularity: str, value: Any):
     if value is None:
         return None
-
     if isinstance(value, datetime):
         dt = value
     elif isinstance(value, date):
@@ -327,7 +353,7 @@ def format_value(value: Any) -> str:
         return str(value)
 
 def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label: str = "value") -> str:
-    fig, ax = plt.subplots(figsize=(12,6))
+    fig, ax = plt.subplots(figsize=(12, 6))
     for s in series:
         xs, ys = [], []
         for p in s['data']:
@@ -340,8 +366,9 @@ def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label:
     ax.set_xlabel("period")
     ax.set_ylabel(y_label)
     ax.legend(loc='best')
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
+    locator = mdates.AutoDateLocator()
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
     fig.autofmt_xdate()
     return _encode_png(fig)
 
@@ -356,7 +383,7 @@ def generate_grouped_bar_chart(
     x_label: Optional[str] = "period"
 ) -> str:
     if not rows:
-        fig, ax = plt.subplots(figsize=(10,6))
+        fig, ax = plt.subplots(figsize=(10, 6))
         ax.text(0.5, 0.5, "no data", ha="center", va="center")
         ax.axis('off')
         return _encode_png(fig)
@@ -376,7 +403,7 @@ def generate_grouped_bar_chart(
         value = float(r.get("value") or 0)
         values_map.setdefault(dim_val, {})[period_val] = value
 
-    fig, ax = plt.subplots(figsize=(12,6))
+    fig, ax = plt.subplots(figsize=(12, 6))
     x = np.arange(len(periods))
     count = max(len(categories), 1)
     width = 0.8 / count
@@ -415,12 +442,13 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
     where_clauses: List[str] = []
 
     dt = invoice_datetime_expr()
-    if payload.get('since'):
+    since_norm, until_norm = _normalize_since_until(payload.get('since'), payload.get('until'))
+    if since_norm:
         where_clauses.append(f"{dt} >= %s")
-        params.append(payload['since'])
-    if payload.get('until'):
+        params.append(since_norm)
+    if until_norm:
         where_clauses.append(f"{dt} <= %s")
-        params.append(payload['until'])
+        params.append(until_norm)
 
     filters = payload.get('filters') or {}
     for k, vals in filters.items():
@@ -566,7 +594,7 @@ def build_total_series(
     return data
 
 def generate_pie_chart(labels: List[str], values: List[float]) -> str:
-    fig, ax = plt.subplots(figsize=(10,6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
     ax.axis('equal')
     ax.legend(labels, loc='center left', bbox_to_anchor=(1.0, 0.5))

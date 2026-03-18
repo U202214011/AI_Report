@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import json
 import os
 import re
@@ -94,49 +94,146 @@ _PERIOD_YEAR_RE = re.compile(r"^(\d{4})$")
 _PERIOD_MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
 _PERIOD_DAY_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _PERIOD_QUARTER_RE = re.compile(r"^(\d{4})-Q([1-4])$")
+_UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
+
+# -------------------------
+# 模板诊断状态（供 routes debug 返回）
+# -------------------------
+_TEMPLATE_DEBUG_STATE: Dict[str, Any] = {
+    "template_file": TEMPLATE_FILE,
+    "template_file_exists": False,
+    "loaded": False,
+    "error": None,
+    "keys": [],
+    "env_prompt_template": None,
+    "selected_key": None,
+    "selected_by": None,
+    "selected_template_len": 0,
+    "used_fallback_default": False,
+    "rendered_prompt_len": 0,
+    "render_ok": False,
+    "render_error": None,
+    "unresolved_placeholder_count": 0,
+    "fallback_reason": None
+}
+
+
+def _reset_template_debug_state() -> None:
+    _TEMPLATE_DEBUG_STATE.update({
+        "template_file": TEMPLATE_FILE,
+        "template_file_exists": os.path.exists(TEMPLATE_FILE),
+        "loaded": False,
+        "error": None,
+        "keys": [],
+        "env_prompt_template": os.getenv("PROMPT_TEMPLATE"),
+        "selected_key": None,
+        "selected_by": None,
+        "selected_template_len": 0,
+        "used_fallback_default": False,
+        "rendered_prompt_len": 0,
+        "render_ok": False,
+        "render_error": None,
+        "unresolved_placeholder_count": 0,
+        "fallback_reason": None
+    })
+
+
+def get_template_debug_state() -> Dict[str, Any]:
+    return dict(_TEMPLATE_DEBUG_STATE)
+
 
 def load_templates() -> Dict[str, Any]:
+    """
+    读取 prompt 模板：
+    - 使用 utf-8-sig，兼容 BOM 文件
+    - 返回 dict；异常时返回 {}
+    """
+    _reset_template_debug_state()
     try:
-        with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+        with open(TEMPLATE_FILE, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            _TEMPLATE_DEBUG_STATE["error"] = "template JSON root is not an object"
+            return {}
+        _TEMPLATE_DEBUG_STATE["loaded"] = True
+        _TEMPLATE_DEBUG_STATE["keys"] = list(data.keys())
+        return data
+    except Exception as e:
+        _TEMPLATE_DEBUG_STATE["error"] = repr(e)
         return {}
+
 
 def pick_template(report_type: str, templates: Dict[str, Any]) -> str:
     env_key = os.getenv("PROMPT_TEMPLATE")
     if env_key:
         env_key = env_key.strip()
-        if env_key in templates:
-            return templates[env_key].get("template", "")
+        if env_key in templates and isinstance(templates.get(env_key), dict):
+            t = templates[env_key].get("template", "")
+            _TEMPLATE_DEBUG_STATE["selected_key"] = env_key
+            _TEMPLATE_DEBUG_STATE["selected_by"] = "env"
+            _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(t or "")
+            return t
 
-    if report_type in templates:
-        return templates[report_type].get("template", "")
-    if "default" in templates:
-        return templates["default"].get("template", "")
+    if report_type in templates and isinstance(templates.get(report_type), dict):
+        t = templates[report_type].get("template", "")
+        _TEMPLATE_DEBUG_STATE["selected_key"] = report_type
+        _TEMPLATE_DEBUG_STATE["selected_by"] = "report_type"
+        _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(t or "")
+        return t
+
+    if "default" in templates and isinstance(templates.get("default"), dict):
+        t = templates["default"].get("template", "")
+        _TEMPLATE_DEBUG_STATE["selected_key"] = "default"
+        _TEMPLATE_DEBUG_STATE["selected_by"] = "default"
+        _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(t or "")
+        return t
+
+    _TEMPLATE_DEBUG_STATE["selected_key"] = None
+    _TEMPLATE_DEBUG_STATE["selected_by"] = "none"
+    _TEMPLATE_DEBUG_STATE["selected_template_len"] = 0
     return ""
+
 
 class _SafeFormatDict(dict):
     def __missing__(self, key):
         return "N/A"
 
+
+def _count_unresolved_placeholders(text: str) -> int:
+    return len(_UNRESOLVED_PLACEHOLDER_RE.findall(text or ""))
+
+
+def _has_unresolved_placeholders(text: str) -> bool:
+    return _count_unresolved_placeholders(text) > 0
+
+
 def render_template(template_text: str, payload: Dict[str, Any]) -> str:
     try:
-        return template_text.format_map(_SafeFormatDict(payload))
-    except Exception:
+        out = template_text.format_map(_SafeFormatDict(payload))
+        _TEMPLATE_DEBUG_STATE["render_ok"] = True
+        _TEMPLATE_DEBUG_STATE["render_error"] = None
+        return out
+    except Exception as e:
+        _TEMPLATE_DEBUG_STATE["render_ok"] = False
+        _TEMPLATE_DEBUG_STATE["render_error"] = repr(e)
         return template_text
+
 
 def _json_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
     return str(obj)
 
+
 def cache_chart(key: Optional[str], image: Optional[str]) -> None:
     if not key or not image:
         return
     CHART_MEMORY[key] = image
 
+
 def get_cached_chart(key: str) -> Optional[str]:
     return CHART_MEMORY.get(key)
+
 
 def get_frontend_schema() -> Dict[str, Any]:
     return {
@@ -149,19 +246,23 @@ def get_frontend_schema() -> Dict[str, Any]:
         "dimensions": ["总量", "流派", "艺术家", "国家", "城市", "客户", "员工"]
     }
 
+
 def _safe_float(value: Any) -> float:
     try:
         return float(value or 0)
     except Exception:
         return 0.0
 
+
 def _sum_values(rows: List[Dict[str, Any]]) -> float:
     return sum(_safe_float(r.get("value")) for r in rows)
 
+
 def _compute_total_metric(metric: str, granularity: str, since: Optional[str], until: Optional[str]) -> float:
+    sql, params = build_period_trend(metric, granularity, since, until)
+    rows = run_query(sql, params)
+
     if metric != "avg_order_value":
-        sql, params = build_period_trend(metric, granularity, since, until)
-        rows = run_query(sql, params)
         return _sum_values(rows)
 
     sales_sql, sales_params = build_period_trend("sales_amount", granularity, since, until)
@@ -171,6 +272,7 @@ def _compute_total_metric(metric: str, granularity: str, since: Optional[str], u
     total_sales = _sum_values(sales_rows)
     total_orders = _sum_values(order_rows)
     return total_sales / total_orders if total_orders else 0.0
+
 
 def _compute_growth(series: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     growth = []
@@ -189,6 +291,7 @@ def _compute_growth(series: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         prev_value = value
     return growth
 
+
 def _trend_direction(values: List[float]) -> str:
     if len(values) < 2:
         return "稳定"
@@ -200,6 +303,7 @@ def _trend_direction(values: List[float]) -> str:
         return "稳定"
     return "上升" if slope > 0 else "下降"
 
+
 def _extract_peak_valley(series: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not series:
         return {"peak": None, "valley": None}
@@ -210,6 +314,7 @@ def _extract_peak_valley(series: List[Dict[str, Any]]) -> Dict[str, Any]:
         "peak": {"period": peak[0], "value": peak[1]},
         "valley": {"period": valley[0], "value": valley[1]}
     }
+
 
 def _parse_period_label(value: Any) -> Optional[datetime]:
     if value is None:
@@ -239,6 +344,7 @@ def _parse_period_label(value: Any) -> Optional[datetime]:
 
     return None
 
+
 def _format_period_label(granularity: str, dt: datetime) -> str:
     if granularity == "quarter":
         q = (dt.month - 1) // 3 + 1
@@ -248,6 +354,7 @@ def _format_period_label(granularity: str, dt: datetime) -> str:
     if granularity == "year":
         return dt.strftime("%Y")
     return dt.strftime("%Y-%m-%d")
+
 
 def _shift_period_label(granularity: str, label: Any, steps: int) -> Optional[str]:
     dt = _parse_period_label(label)
@@ -265,6 +372,7 @@ def _shift_period_label(granularity: str, label: Any, steps: int) -> Optional[st
         dt = dt + relativedelta(days=steps)
     return _format_period_label(granularity, dt)
 
+
 def _compute_volatility(values: List[float]) -> Dict[str, float]:
     if not values:
         return {"mean": 0.0, "std": 0.0, "coef_var": 0.0}
@@ -272,6 +380,7 @@ def _compute_volatility(values: List[float]) -> Dict[str, float]:
     std = float(np.std(values))
     coef = std / mean if mean not in (0, None) else 0.0
     return {"mean": mean, "std": std, "coef_var": coef}
+
 
 def _compute_basic_stats(values: List[float]) -> Dict[str, float]:
     if not values:
@@ -288,6 +397,7 @@ def _compute_basic_stats(values: List[float]) -> Dict[str, float]:
         "std": float(np.std(values)),
         "count": len(values)
     }
+
 
 def _max_growth_period(series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if len(series) < 2:
@@ -313,6 +423,7 @@ def _max_growth_period(series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]
             }
     return max_record
 
+
 def _min_growth_period(series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if len(series) < 2:
         return None
@@ -337,11 +448,13 @@ def _min_growth_period(series: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]
             }
     return min_record
 
+
 def _period_of_value(series: List[Dict[str, Any]], target_value: float) -> Optional[str]:
     if not series:
         return None
     closest = min(series, key=lambda x: abs(_safe_float(x.get("y")) - target_value))
     return closest.get("x")
+
 
 def _compute_dim_totals(rows: List[Dict[str, Any]], dim_key: str) -> Dict[str, Any]:
     totals: Dict[str, float] = {}
@@ -350,6 +463,7 @@ def _compute_dim_totals(rows: List[Dict[str, Any]], dim_key: str) -> Dict[str, A
         totals[label] = totals.get(label, 0.0) + _safe_float(r.get("value"))
     total_all = sum(totals.values())
     return {"totals": totals, "total_all": total_all}
+
 
 def _build_stat_dimension_summary(
     dim: str,
@@ -404,6 +518,7 @@ def _build_stat_dimension_summary(
         "minName": min_name
     }
 
+
 def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
     if not dimension_summaries:
         return "（无维度明细数据）"
@@ -428,6 +543,7 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
         )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
 
 def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
     if not dimension_summaries:
@@ -454,8 +570,8 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> s
             min_growth = cat.get("minGrowthPeriod") or {}
             peak = cat.get("peakValley", {}).get("peak")
             valley = cat.get("peakValley", {}).get("valley")
-            share = cat.get("sharePct")
-            contrib = cat.get("growthContributionPct")
+            share = cat.get("sharePct") or 0
+            contrib = cat.get("growthContributionPct") or 0
 
             lines.append(
                 f"{idx}. {name}：占比{share:.2f}%；趋势{trend}；波动标准差{std:.2f}，变异系数{coef:.2f}"
@@ -473,10 +589,11 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> s
                 )
             if peak and valley:
                 lines.append(
-                    f"   - 峰值：{peak.get('period')}（{peak.get('value'):.2f}）；谷值：{valley.get('period')}（{valley.get('value'):.2f}）"
+                    f"   - 峰值：{peak.get('period')}（{_safe_float(peak.get('value')):.2f}）；谷值：{valley.get('period')}（{_safe_float(valley.get('value')):.2f}）"
                 )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
 
 def _build_stat_llm_summary(
     metric: str,
@@ -542,6 +659,7 @@ def _build_stat_llm_summary(
         }
     }
 
+
 def _build_trend_llm_summary(
     metric: str,
     metric_label: str,
@@ -561,8 +679,6 @@ def _build_trend_llm_summary(
     min_period = _period_of_value(series, basic_stats.get("min", 0))
     median_period = _period_of_value(series, basic_stats.get("median", 0))
 
-    total_growth = (_safe_float(series[-1].get("y")) - _safe_float(series[0].get("y"))) if series else 0.0
-
     dim_summaries = []
     for dim_block in dimension_series:
         dim = dim_block.get("dimension")
@@ -575,7 +691,6 @@ def _build_trend_llm_summary(
         top5_share = sum(v for _, v in sorted_totals[:5]) / total_all * 100 if total_all else 0.0
         topN_share = sum(v for _, v in sorted_totals[:top_n]) / total_all * 100 if total_all else 0.0
 
-        # 先收集每个类别的增长值，用于计算“绝对贡献率”
         cat_growths = []
         for s in dim_block.get("series", []):
             data = s.get("data") or []
@@ -594,8 +709,6 @@ def _build_trend_llm_summary(
             peak_valley_cat = _extract_peak_valley(data)
             share_pct = (totals_map.get(label, 0.0) / total_all * 100) if total_all else 0.0
             cat_growth = cat_growths[idx] if idx < len(cat_growths) else 0.0
-
-            # ✅ 修复点：改为“绝对增长贡献率”
             growth_contrib = abs(cat_growth) / total_abs_growth * 100 if total_abs_growth else 0.0
 
             categories.append({
@@ -647,12 +760,14 @@ def _build_trend_llm_summary(
         }
     }
 
+
 def _format_metric_value(metric: str, value: float) -> str:
     if metric == "order_count":
         return f"{value:,.0f} 笔"
     if metric == "avg_order_value":
         return f"{value:,.2f} 元/笔"
     return f"{value:,.2f} 元"
+
 
 def _build_total_series_text(series: List[Dict[str, Any]], metric: str) -> str:
     if not series:
@@ -663,6 +778,29 @@ def _build_total_series_text(series: List[Dict[str, Any]], metric: str) -> str:
         value = _safe_float(item.get("y"))
         lines.append(f"{label}: {_format_metric_value(metric, value)}")
     return "\n".join(lines)
+
+
+def _fallback_template() -> str:
+    return (
+        "【角色与场景】\n"
+        "你是一位{role_context[analyst_level]}，负责{role_context[domain]}的{role_context[decision_type]}分析。\n\n"
+        "【数据事实】\n"
+        "{data_summary[natural_fragments][overview_sentence]}\n\n"
+        "【核心数据指标（按{series_granularity_label}）】\n"
+        "{total_series_text}\n\n"
+        "【维度结构（{dimension_analysis[dim_label]}）】\n"
+        "{dim_table}\n\n"
+        "【数据局限】\n"
+        "{limitations_note}\n\n"
+        "【输出要求】\n"
+        "格式：{format_requirements[sections]}\n"
+        "风格：{format_requirements[tone]}\n"
+        "数字格式：{format_requirements[number_format]}\n"
+        "字数：{format_requirements[length_limit]}\n\n"
+        "【强制约束】\n"
+        "{constraints_yaml}"
+    )
+
 
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     report_type = normalized.get("reportType", "statistical")
@@ -711,15 +849,19 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     }
 
     if report_type == "statistical":
-        total_metric = _compute_total_metric(metric, granularity, since, until)
+        sql, params = build_period_trend(metric, granularity, since, until)
+        rows = run_query(sql, params)
+        total_series = build_total_series(rows, granularity, periods=periods if periods else None)
+
+        if metric == "avg_order_value":
+            total_metric = _compute_total_metric(metric, granularity, since, until)
+        else:
+            total_metric = sum(_safe_float(item.get("y")) for item in total_series)
+
         dimension_summaries = [
             _build_stat_dimension_summary(dim, metric, since, until, top_n)
             for dim in dims if dim != "total"
         ]
-
-        sql, params = build_period_trend(metric, granularity, since, until)
-        rows = run_query(sql, params)
-        total_series = build_total_series(rows, granularity, periods=periods if periods else None)
 
         prompt_data["statistical"] = {
             "total": total_metric,
@@ -874,10 +1016,41 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
 
     templates = load_templates()
     template_text = pick_template(report_type, templates)
+
+    # 兜底1：模板文件/键不可用导致空模板
+    if not (template_text or "").strip():
+        template_text = _fallback_template()
+        _TEMPLATE_DEBUG_STATE["used_fallback_default"] = True
+        _TEMPLATE_DEBUG_STATE["fallback_reason"] = "empty_template"
+        _TEMPLATE_DEBUG_STATE["selected_by"] = (
+            _TEMPLATE_DEBUG_STATE.get("selected_by") or "builtin_fallback"
+        )
+        _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(template_text)
+
     prompt_text = render_template(template_text, template_payload)
+
+    unresolved_count = _count_unresolved_placeholders(prompt_text)
+    _TEMPLATE_DEBUG_STATE["unresolved_placeholder_count"] = unresolved_count
+
+    # 兜底2：渲染失败或仍存在占位符 -> 使用内置模板再渲染一次
+    if (not prompt_text.strip()) or _has_unresolved_placeholders(prompt_text):
+        fallback_tpl = _fallback_template()
+        fallback_prompt = render_template(fallback_tpl, template_payload)
+        fallback_unresolved = _count_unresolved_placeholders(fallback_prompt)
+
+        if fallback_prompt.strip() and fallback_unresolved <= unresolved_count:
+            prompt_text = fallback_prompt
+            _TEMPLATE_DEBUG_STATE["used_fallback_default"] = True
+            _TEMPLATE_DEBUG_STATE["fallback_reason"] = "render_failed_or_unresolved_placeholders"
+            _TEMPLATE_DEBUG_STATE["selected_by"] = "builtin_fallback"
+            _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(fallback_tpl)
+            _TEMPLATE_DEBUG_STATE["unresolved_placeholder_count"] = fallback_unresolved
+
+    _TEMPLATE_DEBUG_STATE["rendered_prompt_len"] = len(prompt_text or "")
 
     return {
         "prompt": prompt_text,
         "promptData": prompt_data,
-        "frontendSchema": get_frontend_schema()
+        "frontendSchema": get_frontend_schema(),
+        "templateDebug": get_template_debug_state()
     }

@@ -7,5 +7,8 @@ def adapt_report_output(raw: Dict[str, Any]) -> Dict[str, Any]:
         "plots": raw.get("plots", []),
         "tables": raw.get("tables", []),
         "data": raw.get("data", []),
+        "prompt": raw.get("prompt"),           # 添加这行
+        "promptData": raw.get("promptData"),   # 添加这行（如果需要）
+        "templateDebug": raw.get("templateDebug", {}),  # 添加这行
         "message": raw.get("message")
     }

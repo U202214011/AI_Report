@@ -1,196 +1,362 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <title>Chinook 销售智能报告</title>
+  <meta charset="utf-8" />
+  <title>Chinook 报告对话工作台</title>
   <style>
-    body { font-family: "Segoe UI", sans-serif; margin: 20px; background:#f8fafc; color:#222;}
-    .card { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.05); margin-bottom:16px;}
-    label { display:block; margin-top:8px; font-weight:600;}
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    button { background:#2563eb; color:#fff; border:none; padding:10px 18px; border-radius:6px; cursor:pointer;}
-    button:hover { background:#1e4fd6;}
-    .preview img { max-width:100%; border:1px solid #ddd; margin-top:8px; }
-    h2, h3, h4 { margin:8px 0;}
+    body { margin:0; font-family:"Segoe UI",sans-serif; background:#f6f8fb; color:#1f2937; }
+    .layout { display:grid; grid-template-columns: 340px 1fr; height:100vh; }
+    .left { background:#fff; border-right:1px solid #e5e7eb; padding:14px; overflow:auto; }
+    .right { display:grid; grid-template-rows: 52px 1fr 120px; height:100vh; }
+    .top { background:#fff; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; padding:0 14px; }
+    .badge { padding:4px 10px; border-radius:999px; font-size:12px; }
+    .ok { background:#e8f8ee; color:#166534; }
+    .warn { background:#fff7e6; color:#92400e; }
+    .danger { background:#feecec; color:#991b1b; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; padding:10px; overflow:hidden; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; }
+    .card h3 { margin:0; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:14px; background:#fafafa; }
+    .scroll { flex:1; overflow:auto; padding:12px; }
+
+    .msg { margin-bottom:10px; padding:10px 12px; border-radius:10px; white-space:pre-wrap; line-height:1.6; }
+    .u { background:#eff6ff; border:1px solid #dbeafe; }
+    .a { background:#f9fafb; border:1px solid #e5e7eb; }
+
+    .composer { background:#fff; border-top:1px solid #e5e7eb; padding:10px; display:grid; grid-template-columns:1fr auto; gap:8px; }
+    textarea, input, select { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px; font:inherit; }
+    textarea { height:95px; resize:none; }
+    button { border:none; background:#2563eb; color:#fff; border-radius:8px; padding:0 14px; cursor:pointer; }
+    .btn2 { background:#4b5563; }
+    .tiny { font-size:12px; color:#6b7280; }
+    .row { display:flex; gap:8px; margin:8px 0; }
+    .plots img { max-width:100%; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px; }
+    .toggle { display:flex; align-items:center; gap:6px; font-size:12px; }
+
+    .prompt-box {
+      white-space: pre-wrap;
+      font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      background: #fcfcff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+    }
   </style>
 </head>
 <body>
-  <h2>Chinook 音乐销售报告生成器</h2>
+<div class="layout">
+  <aside class="left">
+    <h3 style="margin:0 0 10px;">配置</h3>
 
-  <div class="card">
-    <label>报告类型：
-      <select id="report_type">
-        <option value="stat">统计型</option>
-        <option value="trend">趋势型</option>
-      </select>
-    </label>
+    <label>报告类型</label>
+    <select id="report_type">
+      <option value="stat">统计型</option>
+      <option value="trend">趋势型</option>
+    </select>
 
     <div class="row">
-      <label>指标:
+      <div style="flex:1;">
+        <label>指标</label>
         <select id="metric">
           <option value="sales_amount">销售额</option>
           <option value="order_count">订单量</option>
           <option value="avg_order_value">客单价</option>
         </select>
-      </label>
-
-      <label>时间粒度:
+      </div>
+      <div style="flex:1;">
+        <label>粒度</label>
         <select id="granularity">
           <option value="month">月</option>
           <option value="quarter">季</option>
           <option value="year">年</option>
         </select>
-      </label>
-
-      <label>Top N:
-        <input id="top_n" type="number" value="10" min="1" max="50" />
-      </label>
+      </div>
     </div>
 
     <div class="row">
-      <label>开始日期:
+      <div style="flex:1;">
+        <label>开始</label>
         <input id="start_date" type="date" />
-      </label>
-      <label>结束日期:
+      </div>
+      <div style="flex:1;">
+        <label>结束</label>
         <input id="end_date" type="date" />
-      </label>
+      </div>
     </div>
 
-    <div class="row">
-      <label>对比维度（统计/趋势筛选，多选）:</label>
-      <label><input type="checkbox" name="dimension" value="total" /> 总量</label>
-      <label><input type="checkbox" name="dimension" value="genre" /> 音乐流派</label>
-      <label><input type="checkbox" name="dimension" value="artist" /> 艺术家</label>
-      <label><input type="checkbox" name="dimension" value="country" /> 国家</label>
-      <label><input type="checkbox" name="dimension" value="city" /> 城市</label>
-      <label><input type="checkbox" name="dimension" value="customer" /> 客户</label>
-      <label><input type="checkbox" name="dimension" value="employee" /> 员工</label>
+    <label>Top N</label>
+    <input id="top_n" type="number" value="10" min="1" max="50" />
+
+    <div class="tiny" style="margin-top:10px;">维度</div>
+    <div class="tiny">
+      <label><input type="checkbox" name="dimension" value="total" checked> 总量</label>
+      <label><input type="checkbox" name="dimension" value="genre"> 流派</label>
+      <label><input type="checkbox" name="dimension" value="artist"> 艺术家</label>
+      <label><input type="checkbox" name="dimension" value="country"> 国家</label>
+      <label><input type="checkbox" name="dimension" value="city"> 城市</label>
+      <label><input type="checkbox" name="dimension" value="customer"> 客户</label>
+      <label><input type="checkbox" name="dimension" value="employee"> 员工</label>
     </div>
 
-    <button id="generate">生成报告</button>
-  </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="genBtn" style="flex:1;">生成并开始对话</button>
+      <button id="newBtn" class="btn2">新会话</button>
+    </div>
 
-  <div class="card">
-    <h3>图表</h3>
-    <div id="plots" class="preview"></div>
-  </div>
+    <label class="toggle">
+      <input type="checkbox" id="showReasoning" checked />
+      显示思考过程（reasoning）
+    </label>
+  </aside>
 
-  <script>
-    const createPromptWindow = () => {
-      const win = window.open('', '_blank');
-      win.document.write(
-        '<html><head><title>Prompt 模板</title></head>' +
-        '<body style="margin:0; font-family: Segoe UI, sans-serif;">' +
-        '<div style="padding:16px; background:#f8fafc;">' +
-        '<h3 style="margin:0 0 8px 0;">Prompt 模板</h3>' +
-        '<pre id="prompt-output" style="white-space: pre-wrap; font-family: ui-monospace, Menlo, Monaco, monospace; line-height:1.6; background:#fff; padding:16px; border-radius:8px;">' +
-        '</pre>' +
-        '</div></body></html>'
-      );
-      return win;
-    };
+  <section class="right">
+    <div class="top">
+      <strong>报告对话（显示 Prompt 模板，不显示 promptData）</strong>
+      <span id="ctxBadge" class="badge ok">上下文充足</span>
+    </div>
 
-    const createLlmWindow = () => {
-      const win = window.open('', '_blank');
-      win.document.write(
-        '<html><head><title>LLM 生成过程</title></head>' +
-        '<body style="margin:0; font-family: Segoe UI, sans-serif;">' +
-        '<div style="padding:16px; background:#f8fafc;">' +
-        '<h3 style="margin:0 0 8px 0;">LLM 生成过程</h3>' +
-        '<pre id="llm-output" style="white-space: pre-wrap; font-family: ui-monospace, Menlo, Monaco, monospace; line-height:1.6; background:#fff; padding:16px; border-radius:8px;">' +
-        '</pre>' +
-        '</div></body></html>'
-      );
-      return win;
-    };
+    <div class="grid">
+      <div class="card">
+        <h3>用户与报告内容</h3>
+        <div id="contentLog" class="scroll"></div>
+      </div>
 
-    const showPromptTemplate = async (payload) => {
-      const win = createPromptWindow();
-      const out = win.document.getElementById('prompt-output');
-      out.textContent = '加载中...';
+      <div class="card">
+        <h3>LLM 思考过程（Reasoning）</h3>
+        <div id="reasoningLog" class="scroll"></div>
+      </div>
 
-      const promptRes = await fetch('/api/prompt', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const promptJson = await promptRes.json();
-      out.textContent = promptJson.prompt || '未返回 prompt';
-    };
+      <div class="card">
+        <h3>Prompt 模板 + 图表预览</h3>
+        <div class="scroll">
+          <div class="tiny" style="margin-bottom:6px;">当前发送给LLM的 Prompt：</div>
+          <div id="promptBox" class="prompt-box">尚未生成 Prompt</div>
+          <hr style="margin:12px 0;border:none;border-top:1px solid #eee;" />
+          <div id="plots" class="plots"><div class="tiny">尚未生成图表</div></div>
+        </div>
+      </div>
+    </div>
 
-    const streamLlmReport = async (payload) => {
-      const win = createLlmWindow();
-      const output = win.document.getElementById('llm-output');
-      output.textContent = '';
+    <div class="composer">
+      <textarea id="chatInput" placeholder="继续追问，例如：请解释 2024-Q3 的异常波动并给出行动建议"></textarea>
+      <button id="sendBtn">发送</button>
+    </div>
+  </section>
+</div>
 
-      const res = await fetch('/api-llm', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
+<script>
+  let messages = []; // 仅 user/assistant 对话历史（不放 promptData）
+  let sending = false;
+  let lastCtxCheckAt = 0;
+  let ctxCheckTimer = null;
+
+  const contentLog = document.getElementById('contentLog');
+  const reasoningLog = document.getElementById('reasoningLog');
+  const plots = document.getElementById('plots');
+  const promptBox = document.getElementById('promptBox');
+  const ctxBadge = document.getElementById('ctxBadge');
+
+  const addContent = (role, text) => {
+    const d = document.createElement('div');
+    d.className = 'msg ' + (role === 'user' ? 'u' : 'a');
+    d.textContent = text || '';
+    contentLog.appendChild(d);
+    contentLog.scrollTop = contentLog.scrollHeight;
+    return d;
+  };
+
+  const addReasoning = (text) => {
+    const d = document.createElement('div');
+    d.className = 'msg a';
+    d.style.background = '#fff7ed';
+    d.style.border = '1px solid #fed7aa';
+    d.textContent = text || '';
+    reasoningLog.appendChild(d);
+    reasoningLog.scrollTop = reasoningLog.scrollHeight;
+    return d;
+  };
+
+  const payload = () => ({
+    report_type: document.getElementById('report_type').value,
+    metric: document.getElementById('metric').value,
+    granularity: document.getElementById('granularity').value,
+    start_date: document.getElementById('start_date').value || null,
+    end_date: document.getElementById('end_date').value || null,
+    top_n: Number(document.getElementById('top_n').value || 10),
+    dimensions: Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value)
+  });
+
+  async function refreshCtx() {
+    const res = await fetch('/api/chat/context-check', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        systemPrompt: "你是资深数据分析助手，请严格依据给定报告数据进行回答。",
+        messages
+      })
+    });
+    const j = await res.json();
+    ctxBadge.textContent = `${j.message}（约 ${j.used_tokens_est}/${j.limit_tokens_est}）`;
+    ctxBadge.className = 'badge ' + (j.level === 'danger' ? 'danger' : (j.level === 'warn' ? 'warn' : 'ok'));
+  }
+
+  async function refreshCtxThrottled(force=false) {
+    const now = Date.now();
+    if (!force && now - lastCtxCheckAt < 2500) return;
+    lastCtxCheckAt = now;
+    await refreshCtx();
+  }
+
+  async function runChatSSE() {
+    if (sending) return;
+    sending = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    try {
+      const showReasoning = document.getElementById('showReasoning').checked;
+      const res = await fetch('/api/chat/sse', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          systemPrompt: "你是资深数据分析助手，请严格依据给定报告数据进行回答。",
+          messages,
+          show_reasoning: showReasoning
+        })
       });
 
       if (!res.ok || !res.body) {
-        output.textContent = 'LLM 请求失败：' + res.status;
+        addContent('assistant', '请求失败：' + res.status);
         return;
       }
 
+      const assistantBox = addContent('assistant', '');
+      const reasoningBox = showReasoning ? addReasoning('') : null;
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
       while (true) {
-        const { value, done } = await reader.read();
+        const {value, done} = await reader.read();
         if (done) break;
-        output.textContent += decoder.decode(value, { stream: true });
-      }
-    };
+        buffer += decoder.decode(value, {stream:true});
 
-    document.getElementById('generate').addEventListener('click', async () => {
-      const dimensions = Array.from(document.querySelectorAll('input[name="dimension"]:checked'))
-        .map(cb => cb.value);
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const raw = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
 
-      const payload = {
-        report_type: document.getElementById('report_type').value,
-        metric: document.getElementById('metric').value,
-        granularity: document.getElementById('granularity').value,
-        start_date: document.getElementById('start_date').value || null,
-        end_date: document.getElementById('end_date').value || null,
-        top_n: document.getElementById('top_n').value || 10,
-        dimensions: dimensions
-      };
+          const lines = raw.split('\n');
+          let ev = 'message';
+          let data = '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) ev = line.slice(6).trim();
+            if (line.startsWith('data:')) data += line.slice(5).trim();
+          }
+          if (!data) continue;
 
-      document.getElementById('plots').innerHTML = '正在生成图表...';
+          let obj = {};
+          try { obj = JSON.parse(data); } catch { continue; }
 
-      try {
-        const res = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        });
-        const j = await res.json();
-
-        if (j.error || j.message) {
-          document.getElementById('plots').innerText = '错误：' + (j.error || j.message);
-          return;
+          if (ev === 'notice') {
+            addContent('assistant', `⚠️ ${obj.text}`);
+          } else if (ev === 'error') {
+            addContent('assistant', `❌ ${obj.message}`);
+          } else if (ev === 'reasoning' && reasoningBox) {
+            reasoningBox.textContent += obj.text || '';
+            reasoningLog.scrollTop = reasoningLog.scrollHeight;
+          } else if (ev === 'content') {
+            assistantBox.textContent += obj.text || '';
+            contentLog.scrollTop = contentLog.scrollHeight;
+          } else if (ev === 'context') {
+            ctxBadge.textContent = `${obj.message}（约 ${obj.used_tokens_est}/${obj.limit_tokens_est}）`;
+            ctxBadge.className = 'badge ' + (obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok'));
+          }
         }
-
-        const plotsDiv = document.getElementById('plots');
-        plotsDiv.innerHTML = '';
-        (j.plots || []).forEach(p => {
-          const title = document.createElement('h4'); title.innerText = p.title;
-          const img = document.createElement('img');
-          img.src = 'data:image/png;base64,' + p.image;
-          plotsDiv.appendChild(title);
-          plotsDiv.appendChild(img);
-        });
-
-        // 同时弹出两个页面
-        await showPromptTemplate(payload);
-        await streamLlmReport(payload);
-
-      } catch (err) {
-        document.getElementById('plots').innerText = '请求失败：' + err;
       }
+
+      messages.push({role:'assistant', content: assistantBox.textContent});
+      await refreshCtxThrottled(true);
+    } finally {
+      sending = false;
+      document.getElementById('sendBtn').disabled = false;
+    }
+  }
+
+  document.getElementById('genBtn').addEventListener('click', async () => {
+    const p = payload();
+    plots.innerHTML = '<div class="tiny">生成中...</div>';
+
+    const res = await fetch('/api/generate?debug=1', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(p)
     });
-  </script>
+    const j = await res.json();
+
+    if (j.error || j.message) {
+      plots.innerHTML = `<div class="tiny">错误：${j.error || j.message}</div>`;
+      return;
+    }
+
+    // 1) 显示 Prompt 模板（仅显示 prompt，不显示 promptData）
+    const promptText = (j.prompt || '').trim();
+    promptBox.textContent = promptText || '未返回 prompt';
+
+    // 2) 显示图表
+    plots.innerHTML = '';
+    (j.plots || []).forEach(item => {
+      const h = document.createElement('h4');
+      h.textContent = item.title;
+      const img = document.createElement('img');
+      img.src = 'data:image/png;base64,' + item.image;
+      plots.appendChild(h);
+      plots.appendChild(img);
+    });
+
+    if (!promptText) {
+      addContent('assistant', '未拿到可用 prompt，请检查 prompt 模板配置。');
+      return;
+    }
+
+    // 3) 仅把 prompt 发给模型（不注入 promptData）
+    addContent('user', `【已发送 Prompt 模板】\n${promptText}`);
+    messages.push({ role:'user', content: promptText });
+
+    await refreshCtxThrottled(true);
+    await runChatSSE();
+  });
+
+  document.getElementById('sendBtn').addEventListener('click', async () => {
+    const ipt = document.getElementById('chatInput');
+    const txt = (ipt.value || '').trim();
+    if (!txt) return;
+    ipt.value = '';
+    addContent('user', txt);
+    messages.push({role:'user', content: txt});
+    await refreshCtxThrottled();
+    await runChatSSE();
+  });
+
+  document.getElementById('newBtn').addEventListener('click', async () => {
+    messages = [];
+    contentLog.innerHTML = '';
+    reasoningLog.innerHTML = '';
+    promptBox.textContent = '尚未生成 Prompt';
+    plots.innerHTML = '<div class="tiny">尚未生成图表</div>';
+    addContent('assistant', '已新建会话。你可以点击“生成并开始对话”。');
+    await refreshCtxThrottled(true);
+  });
+
+  document.getElementById('chatInput').addEventListener('input', () => {
+    clearTimeout(ctxCheckTimer);
+    ctxCheckTimer = setTimeout(() => refreshCtxThrottled(false), 800);
+  });
+
+  addContent('assistant', '欢迎使用：左侧配置后生成报告。系统将显示并发送 Prompt 模板，不会显示 promptData。');
+  refreshCtxThrottled(true);
+</script>
 </body>
 </html>

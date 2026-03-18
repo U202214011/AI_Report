@@ -1,0 +1,2 @@
+# AI_Report
+基于chinook数据库的大语言模型的AI报告自动生成

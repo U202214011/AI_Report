@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Chinook 销售智能报告</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 20px; background:#f8fafc; color:#222;}
+    .card { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.05); margin-bottom:16px;}
+    label { display:block; margin-top:8px; font-weight:600;}
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    button { background:#2563eb; color:#fff; border:none; padding:10px 18px; border-radius:6px; cursor:pointer;}
+    button:hover { background:#1e4fd6;}
+    .preview img { max-width:100%; border:1px solid #ddd; margin-top:8px; }
+    h2, h3, h4 { margin:8px 0;}
+  </style>
+</head>
+<body>
+  <h2>Chinook 音乐销售报告生成器</h2>
+
+  <div class="card">
+    <label>报告类型：
+      <select id="report_type">
+        <option value="stat">统计型</option>
+        <option value="trend">趋势型</option>
+      </select>
+    </label>
+
+    <div class="row">
+      <label>指标:
+        <select id="metric">
+          <option value="sales_amount">销售额</option>
+          <option value="order_count">订单量</option>
+          <option value="avg_order_value">客单价</option>
+        </select>
+      </label>
+
+      <label>时间粒度:
+        <select id="granularity">
+          <option value="month">月</option>
+          <option value="quarter">季</option>
+          <option value="year">年</option>
+        </select>
+      </label>
+
+      <label>Top N:
+        <input id="top_n" type="number" value="10" min="1" max="50" />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>开始日期:
+        <input id="start_date" type="date" />
+      </label>
+      <label>结束日期:
+        <input id="end_date" type="date" />
+      </label>
+    </div>
+
+    <div class="row">
+      <label>对比维度（统计/趋势筛选，多选）:</label>
+      <label><input type="checkbox" name="dimension" value="total" /> 总量</label>
+      <label><input type="checkbox" name="dimension" value="genre" /> 音乐流派</label>
+      <label><input type="checkbox" name="dimension" value="artist" /> 艺术家</label>
+      <label><input type="checkbox" name="dimension" value="country" /> 国家</label>
+      <label><input type="checkbox" name="dimension" value="city" /> 城市</label>
+      <label><input type="checkbox" name="dimension" value="customer" /> 客户</label>
+      <label><input type="checkbox" name="dimension" value="employee" /> 员工</label>
+    </div>
+
+    <button id="generate">生成报告</button>
+  </div>
+
+  <div class="card">
+    <h3>图表</h3>
+    <div id="plots" class="preview"></div>
+  </div>
+
+  <script>
+    const createPromptWindow = () => {
+      const win = window.open('', '_blank');
+      win.document.write(
+        '<html><head><title>Prompt 模板</title></head>' +
+        '<body style="margin:0; font-family: Segoe UI, sans-serif;">' +
+        '<div style="padding:16px; background:#f8fafc;">' +
+        '<h3 style="margin:0 0 8px 0;">Prompt 模板</h3>' +
+        '<pre id="prompt-output" style="white-space: pre-wrap; font-family: ui-monospace, Menlo, Monaco, monospace; line-height:1.6; background:#fff; padding:16px; border-radius:8px;">' +
+        '</pre>' +
+        '</div></body></html>'
+      );
+      return win;
+    };
+
+    const createLlmWindow = () => {
+      const win = window.open('', '_blank');
+      win.document.write(
+        '<html><head><title>LLM 生成过程</title></head>' +
+        '<body style="margin:0; font-family: Segoe UI, sans-serif;">' +
+        '<div style="padding:16px; background:#f8fafc;">' +
+        '<h3 style="margin:0 0 8px 0;">LLM 生成过程</h3>' +
+        '<pre id="llm-output" style="white-space: pre-wrap; font-family: ui-monospace, Menlo, Monaco, monospace; line-height:1.6; background:#fff; padding:16px; border-radius:8px;">' +
+        '</pre>' +
+        '</div></body></html>'
+      );
+      return win;
+    };
+
+    const showPromptTemplate = async (payload) => {
+      const win = createPromptWindow();
+      const out = win.document.getElementById('prompt-output');
+      out.textContent = '加载中...';
+
+      const promptRes = await fetch('/api/prompt', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const promptJson = await promptRes.json();
+      out.textContent = promptJson.prompt || '未返回 prompt';
+    };
+
+    const streamLlmReport = async (payload) => {
+      const win = createLlmWindow();
+      const output = win.document.getElementById('llm-output');
+      output.textContent = '';
+
+      const res = await fetch('/api-llm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok || !res.body) {
+        output.textContent = 'LLM 请求失败：' + res.status;
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        output.textContent += decoder.decode(value, { stream: true });
+      }
+    };
+
+    document.getElementById('generate').addEventListener('click', async () => {
+      const dimensions = Array.from(document.querySelectorAll('input[name="dimension"]:checked'))
+        .map(cb => cb.value);
+
+      const payload = {
+        report_type: document.getElementById('report_type').value,
+        metric: document.getElementById('metric').value,
+        granularity: document.getElementById('granularity').value,
+        start_date: document.getElementById('start_date').value || null,
+        end_date: document.getElementById('end_date').value || null,
+        top_n: document.getElementById('top_n').value || 10,
+        dimensions: dimensions
+      };
+
+      document.getElementById('plots').innerHTML = '正在生成图表...';
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+
+        if (j.error || j.message) {
+          document.getElementById('plots').innerText = '错误：' + (j.error || j.message);
+          return;
+        }
+
+        const plotsDiv = document.getElementById('plots');
+        plotsDiv.innerHTML = '';
+        (j.plots || []).forEach(p => {
+          const title = document.createElement('h4'); title.innerText = p.title;
+          const img = document.createElement('img');
+          img.src = 'data:image/png;base64,' + p.image;
+          plotsDiv.appendChild(title);
+          plotsDiv.appendChild(img);
+        });
+
+        // 同时弹出两个页面
+        await showPromptTemplate(payload);
+        await streamLlmReport(payload);
+
+      } catch (err) {
+        document.getElementById('plots').innerText = '请求失败：' + err;
+      }
+    });
+  </script>
+</body>
+</html>

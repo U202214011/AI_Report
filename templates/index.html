@@ -148,10 +148,19 @@
   <aside class="col col-config">
     <div class="panel-head"><strong>数据库筛选配置</strong></div>
     <div class="panel-body">
+
       <label>报告类型</label>
       <select id="report_type">
         <option value="stat">统计型</option>
         <option value="trend">趋势型</option>
+      </select>
+
+      <label>报告风格</label>
+      <select id="report_style">
+        <option value="simple">简明分析性</option>
+        <option value="attribution">归因解析型</option>
+        <option value="forecast">预测建议型</option>
+        <option value="standard">综合标准型</option>
       </select>
 
       <div class="row">
@@ -314,15 +323,16 @@
     return (last && last.content) ? last.content.trim() : '';
   }
 
-  const payload = () => ({
-    report_type: document.getElementById('report_type').value,
-    metric: document.getElementById('metric').value,
-    granularity: document.getElementById('granularity').value,
-    start_date: document.getElementById('start_date').value || null,
-    end_date: document.getElementById('end_date').value || null,
-    top_n: Number(document.getElementById('top_n').value || 10),
-    dimensions: Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value)
-  });
+const payload = () => ({
+  report_type: document.getElementById('report_type').value,
+  report_style: document.getElementById('report_style').value,
+  metric: document.getElementById('metric').value,
+  granularity: document.getElementById('granularity').value,
+  start_date: document.getElementById('start_date').value || null,
+  end_date: document.getElementById('end_date').value || null,
+  top_n: Number(document.getElementById('top_n').value || 10),
+  dimensions: Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value)
+});
 
   async function loadExportTemplates() {
     try {

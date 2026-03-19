@@ -27,6 +27,17 @@ REPORT_TYPE_MAP = {
     "趋势": "trend"
 }
 
+REPORT_STYLE_MAP = {
+    "简明分析性": "simple",
+    "归因解析型": "attribution",
+    "预测建议型": "forecast",
+    "综合标准型": "standard",
+    "simple": "simple",
+    "attribution": "attribution",
+    "forecast": "forecast",
+    "standard": "standard"
+}
+
 METRIC_MAP = {
     "sales_amount": "sales_amount",
     "销售额": "sales_amount",
@@ -238,6 +249,7 @@ def get_cached_chart(key: str) -> Optional[str]:
 def get_frontend_schema() -> Dict[str, Any]:
     return {
         "report_type": ["统计型", "趋势型"],
+        "report_style": ["简明分析性", "归因解析型", "预测建议型", "综合标准型"],
         "metric": ["销售额", "订单量", "客单价"],
         "granularity": ["月", "季", "年"],
         "top_n": "int",
@@ -813,7 +825,9 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     dims = [d for d in dims if d in DIMENSION_LABELS_CN]
     if not dims:
         dims = ["total"]
-
+    # ✅ 风格字段
+    style_raw = normalized.get("reportStyle")
+    report_style = REPORT_STYLE_MAP.get(style_raw, style_raw) if style_raw else None
     metric_label = METRIC_LABELS_CN.get(metric, metric)
     gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
     periods = build_period_range(granularity, since, until)
@@ -1015,7 +1029,13 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     }
 
     templates = load_templates()
-    template_text = pick_template(report_type, templates)
+
+    # ✅ 优先 reportType + style
+    style_key = f"{report_type}.{report_style}" if report_style else report_type
+    template_text = pick_template(style_key, templates)
+    # ✅ 若未命中则回退
+    if (not (template_text or "").strip()) and report_style:
+        template_text = pick_template(report_type, templates)
 
     # 兜底1：模板文件/键不可用导致空模板
     if not (template_text or "").strip():

@@ -41,6 +41,7 @@ def normalize_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized = {
         "reportType": "statistical" if report_type == "stat" else "trend",
+        "reportStyle": payload.get("report_style"),
         "dimensions": dims,
         "metric": payload.get("metric", "sales_amount"),
         "granularity": payload.get("granularity", "month"),

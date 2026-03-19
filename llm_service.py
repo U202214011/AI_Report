@@ -1,14 +1,11 @@
 from typing import Dict, Any, Generator, List
 import os
 from zai import ZhipuAiClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def _estimate_tokens_from_text(text: str) -> int:
-    """
-    粗略估算 token：
-    - 中文约 1~1.5 字/token
-    - 英文约 3~4 字符/token
-    这里采用保守估算，宁可高估，便于提前预警。
-    """
     if not text:
         return 0
     return max(1, int(len(text) / 1.6))
@@ -21,6 +18,21 @@ def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
         total += _estimate_tokens_from_text(role) + _estimate_tokens_from_text(content) + 6
     return total
 
+def _extract_delta_fields(delta):
+    rc = (
+        getattr(delta, "reasoning_content", None)
+        or getattr(delta, "thinking_content", None)
+        or getattr(delta, "reasoning", None)
+        or getattr(delta, "thinking", None)
+    )
+    cc = (
+        getattr(delta, "content", None)
+        or getattr(delta, "message", None)
+        or getattr(delta, "text", None)
+    )
+    return rc, cc
+
+
 def stream_glm_chat(
     messages: List[Dict[str, Any]],
     model: str = "glm-4.7-flash",
@@ -30,31 +42,90 @@ def stream_glm_chat(
 ) -> Generator[Dict[str, Any], None, None]:
     api_key = os.getenv("ZHIPUAI_API_KEY")
     if not api_key:
-        raise ValueError("Missing ZHIPUAI_API_KEY environment variable")
+        err = "Missing ZHIPUAI_API_KEY environment variable"
+        print(f"[LLM] ERROR: {err}")
+        yield {"type": "error", "content": err}
+        return
 
-    client = ZhipuAiClient(api_key=api_key)
+    try:
+        # ✅ 只保留这一个 client 创建，使用正确的 api_key 变量
+        client = ZhipuAiClient(api_key=api_key)
 
-    request_kwargs: Dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-        "max_tokens": max_tokens,
-        "temperature": temperature
-    }
+        print(f"[LLM] start model={model}, max_tokens={max_tokens}, temperature={temperature}, thinking_enabled={thinking_enabled}")
+        print(f"[LLM] messages_count={len(messages)}")
+        if messages:
+            last = messages[-1]
+            print(f"[LLM] last_role={last.get('role')}, last_content_len={len(str(last.get('content','')))}")
 
-    if thinking_enabled:
-        request_kwargs["thinking"] = {"type": "enabled"}
+        # ❌ 删除下面这行！它把 api_key 覆盖成了字符串 "ZHIPUAI_API_KEY"
+        # client = ZhipuAiClient(api_key="ZHIPUAI_API_KEY")
 
-    response = client.chat.completions.create(**request_kwargs)
+        request_kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
 
-    for chunk in response:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta
-        if getattr(delta, "reasoning_content", None):
-            yield {"type": "reasoning", "content": delta.reasoning_content}
-        if getattr(delta, "content", None):
-            yield {"type": "content", "content": delta.content}
+        if thinking_enabled:
+            request_kwargs["thinking"] = {"type": "enabled"}
+
+        print(f"[LLM] request_kwargs_keys={list(request_kwargs.keys())}")
+        response = client.chat.completions.create(**request_kwargs)
+
+        chunk_count = 0
+        reasoning_chars = 0
+        content_chars = 0
+
+        for chunk in response:
+            chunk_count += 1
+
+            # 如果需要排查字段，打开下一行
+            # print(f"[LLM] raw_chunk={chunk}")
+
+            if not getattr(chunk, "choices", None):
+                continue
+
+            delta = chunk.choices[0].delta
+            rc, cc = _extract_delta_fields(delta)
+
+            if rc:
+                reasoning_chars += len(rc)
+                yield {"type": "reasoning", "content": rc}
+            if cc:
+                content_chars += len(cc)
+                yield {"type": "content", "content": cc}
+
+        print(f"[LLM] done chunk_count={chunk_count}, reasoning_chars={reasoning_chars}, content_chars={content_chars}")
+
+        # 如果流式没有任何内容，则回退非流式
+        if content_chars == 0 and reasoning_chars == 0:
+            print("[LLM] stream empty, fallback to non-stream response")
+            fallback_kwargs = dict(request_kwargs)
+            fallback_kwargs["stream"] = False
+            response = client.chat.completions.create(**fallback_kwargs)
+
+            # 兼容不同返回结构
+            try:
+                msg = response.choices[0].message
+                content = getattr(msg, "content", "") or getattr(msg, "text", "")
+                reasoning = getattr(msg, "reasoning_content", None) or getattr(msg, "thinking_content", None)
+            except Exception:
+                content = ""
+                reasoning = None
+
+            if reasoning:
+                yield {"type": "reasoning", "content": reasoning}
+            if content:
+                yield {"type": "content", "content": content}
+            if not content and not reasoning:
+                yield {"type": "error", "content": "LLM返回为空（stream与非stream均无内容）"}
+
+    except Exception as e:
+        err = f"LLM调用失败: {str(e)}"
+        print(f"[LLM] EXCEPTION: {err}")
+        yield {"type": "error", "content": err}
 
 def stream_glm_report(
     prompt: str,
@@ -63,9 +134,6 @@ def stream_glm_report(
     temperature: float = 1.0,
     thinking_enabled: bool = True
 ) -> Generator[Dict[str, Any], None, None]:
-    """
-    向后兼容旧接口：单轮 prompt -> chat messages
-    """
     messages = [{"role": "user", "content": prompt}]
     for chunk in stream_glm_chat(
         messages=messages,

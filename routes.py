@@ -1,4 +1,5 @@
-from flask import request, jsonify, render_template, Response
+import logging
+from flask import request, jsonify, render_template, Response, send_file
 from api_adapter import normalize_request
 from report_adapter import adapt_report_output
 from prompt_data import build_prompt_bundle
@@ -19,6 +20,16 @@ from report_service import (
 from llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
 import json
 import re  # 新增
+from flask import request, jsonify, render_template, Response, send_file
+from io import BytesIO
+from export_service import (
+    list_export_templates,
+    load_template_config,
+    render_markdown_to_docx_bytes,
+    build_export_filename
+)
+
+logger = logging.getLogger(__name__)
 
 METRIC_LABELS = {
     "sales_amount": "销售额",
@@ -117,6 +128,13 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+def _sse_message(data) -> str:
+    # 默认 message 事件，兼容前端 onmessage
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+def _log_sse_chunk(route_name: str, idx: int, chunk_type: str, content: str):
+    logger.info(f"[{route_name}] chunk#{idx} type={chunk_type} len={len(content or '')}")
+
 
 def register_routes(app):
 
@@ -159,27 +177,51 @@ def register_routes(app):
     def generate_llm_report_sse():
         payload = request.get_json() or {}
         try:
+            logger.info(f"[/api-llm/sse] payload_keys={list(payload.keys())}")
+
             normalized = normalize_request(payload)
             prompt_bundle = build_prompt_bundle(normalized, plots=[])
             prompt_text = prompt_bundle.get("prompt") or ""
             show_reasoning = bool(payload.get("show_reasoning", True))
 
+            logger.info(f"[/api-llm/sse] normalized={normalized}")
+            logger.info(f"[/api-llm/sse] prompt_len={len(prompt_text)} show_reasoning={show_reasoning}")
+
             def stream():
                 yield _sse("meta", {"status": "start"})
-                for chunk in stream_glm_report(prompt_text):
-                    t = chunk.get("type")
-                    c = chunk.get("content") or ""
-                    if not c:
-                        continue
-                    if t == "reasoning":
-                        if show_reasoning:
-                            yield _sse("reasoning", {"text": c})
-                    else:
-                        yield _sse("content", {"text": c})
-                yield _sse("meta", {"status": "done"})
+                chunk_idx = 0
+                try:
+                    for chunk in stream_glm_report(prompt_text):
+                        chunk_idx += 1
+                        t = chunk.get("type")
+                        c = chunk.get("content") or ""
+
+                        _log_sse_chunk("/api-llm/sse", chunk_idx, str(t), c)
+
+                        if not c:
+                            continue
+
+                        if t == "error":
+                            logger.error(f"[/api-llm/sse] model_error={c}")
+                            yield _sse("error", {"message": c})
+                            break
+
+                        if t == "reasoning":
+                            if show_reasoning:
+                                yield _sse("reasoning", {"text": c})
+                        else:
+                            yield _sse("content", {"text": c})
+
+                except Exception as e:
+                    logger.exception(f"[/api-llm/sse] stream exception: {e}")
+                    yield _sse("error", {"message": str(e)})
+                finally:
+                    yield _sse("meta", {"status": "done"})
+                    logger.info(f"[/api-llm/sse] stream done total_chunks={chunk_idx}")
 
             return Response(stream(), mimetype="text/event-stream")
         except Exception as e:
+            logger.exception(f"[/api-llm/sse] route exception: {e}")
             return jsonify({"message": str(e)}), 500
 
     @app.route("/api/chat/context-check", methods=["POST"])
@@ -198,27 +240,51 @@ def register_routes(app):
         system_prompt = payload.get("systemPrompt") or "你是资深数据分析助手，请严格依据给定报告数据进行回答。"
         show_reasoning = bool(payload.get("show_reasoning", True))
 
+        logger.info(f"[/api/chat/sse] payload_keys={list(payload.keys())}")
+        logger.info(
+            f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
+
         if not isinstance(messages, list) or len(messages) == 0:
             return jsonify({"message": "messages 不能为空"}), 400
 
         full_messages = [{"role": "system", "content": system_prompt}] + messages
         used = estimate_messages_tokens(full_messages)
         ctx = _context_status(used, MODEL_CONTEXT_LIMIT)
+        logger.info(f"[/api/chat/sse] context={ctx}")
 
         def stream():
             yield _sse("context", ctx)
             yield _sse("meta", {"status": "start"})
-            for chunk in stream_glm_chat(full_messages):
-                t = chunk.get("type")
-                c = chunk.get("content") or ""
-                if not c:
-                    continue
-                if t == "reasoning":
-                    if show_reasoning:
-                        yield _sse("reasoning", {"text": c})
-                else:
-                    yield _sse("content", {"text": c})
-            yield _sse("meta", {"status": "done"})
+            chunk_idx = 0
+
+            try:
+                for chunk in stream_glm_chat(full_messages):
+                    chunk_idx += 1
+                    t = chunk.get("type")
+                    c = chunk.get("content") or ""
+
+                    _log_sse_chunk("/api/chat/sse", chunk_idx, str(t), c)
+
+                    if not c:
+                        continue
+
+                    if t == "error":
+                        logger.error(f"[/api/chat/sse] model_error={c}")
+                        yield _sse("error", {"message": c})
+                        break
+
+                    if t == "reasoning":
+                        if show_reasoning:
+                            yield _sse("reasoning", {"text": c})
+                    else:
+                        yield _sse("content", {"text": c})
+
+            except Exception as e:
+                logger.exception(f"[/api/chat/sse] stream exception: {e}")
+                yield _sse("error", {"message": str(e)})
+            finally:
+                yield _sse("meta", {"status": "done"})
+                logger.info(f"[/api/chat/sse] stream done total_chunks={chunk_idx}")
 
         return Response(stream(), mimetype="text/event-stream")
 
@@ -376,3 +442,41 @@ def register_routes(app):
             return jsonify(adapt_report_output(raw_output))
         except Exception as e:
             return jsonify(adapt_report_output({"message": str(e)})), 500
+    @app.route("/api/export/templates", methods=["GET"])
+    def export_templates():
+        try:
+            return jsonify({"templates": list_export_templates()})
+        except Exception as e:
+            return jsonify({"message": str(e)}), 500
+
+
+    @app.route("/api/export/report", methods=["POST"])
+    def export_report():
+        """
+        先做纯文本导出（markdown -> docx）
+        后续再加图像插入。
+        """
+        payload = request.get_json() or {}
+        markdown_text = (payload.get("report_markdown") or "").strip()
+        template_id = payload.get("template_id") or "cn_management_a4"
+        report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
+
+        if not markdown_text:
+            return jsonify({"message": "report_markdown 不能为空"}), 400
+
+        try:
+            cfg = load_template_config(template_id)
+            docx_bytes = render_markdown_to_docx_bytes(
+                markdown_text=markdown_text,
+                template_cfg=cfg,
+                report_title=report_title
+            )
+            filename = build_export_filename(prefix=report_title, ext="docx")
+            return send_file(
+                BytesIO(docx_bytes),
+                mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                as_attachment=True,
+                download_name=filename
+            )
+        except Exception as e:
+            return jsonify({"message": str(e)}), 500

@@ -1,0 +1,22 @@
+{
+  "id": "cn_management_a4",
+  "name": "管理层简报-A4（微软雅黑/宋体）",
+  "description": "中文管理汇报风格，标题突出，正文易读",
+  "page": {
+    "size": "A4",
+    "margin_cm": [2.5, 2.2, 2.5, 2.2]
+  },
+  "fonts": {
+    "title": { "family": "微软雅黑", "size_pt": 18, "bold": true },
+    "h1": { "family": "微软雅黑", "size_pt": 15, "bold": true },
+    "h2": { "family": "微软雅黑", "size_pt": 13, "bold": true },
+    "h3": { "family": "微软雅黑", "size_pt": 12, "bold": true },
+    "body": { "family": "宋体", "size_pt": 11, "bold": false }
+  },
+  "paragraph": {
+    "line_spacing": 1.5,
+    "space_before_pt": 4,
+    "space_after_pt": 6,
+    "first_line_indent_chars": 2
+  }
+}

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import os
 import re
 import json
 from io import BytesIO
 from datetime import datetime
+import base64
 
 from docx import Document
 from docx.shared import Pt, Cm
@@ -23,6 +24,9 @@ _OL_RE = re.compile(r'^\s*\d+\.\s+(.*)$')
 _BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
 _ITALIC_RE = re.compile(r'\*(.+?)\*')
 _UNDERLINE_RE = re.compile(r'__(.+?)__')
+
+# ---- image placeholder ----
+_IMAGE_PLACEHOLDER_RE = re.compile(r'^\s*\{\{image:([a-zA-Z0-9_\-]+)\}\}\s*$')
 
 
 def _safe_filename(name: str) -> str:
@@ -236,14 +240,34 @@ def _set_page_layout(doc: Document, cfg: Dict[str, Any]):
     sec.left_margin = _cm(margins[3])
 
 
+def _add_image_block(doc: Document, image_bytes: bytes, cfg: Dict[str, Any]):
+    img_cfg = cfg.get("image", {})
+    width_cm = float(img_cfg.get("max_width_cm", 16))
+    p = doc.add_paragraph()
+    run = p.add_run()
+    run.add_picture(BytesIO(image_bytes), width=_cm(width_cm))
+
+
+def _decode_base64_image(b64: str) -> Optional[bytes]:
+    if not b64:
+        return None
+    # 允许 data:image/png;base64,xxx
+    if "," in b64 and "base64" in b64.split(",")[0]:
+        b64 = b64.split(",", 1)[1]
+    try:
+        return base64.b64decode(b64)
+    except Exception:
+        return None
+
+
 def render_markdown_to_docx_bytes(
     markdown_text: str,
     template_cfg: Dict[str, Any],
     report_title: str | None = None,
-    images: List[bytes] | None = None
+    images: Dict[str, str] | None = None
 ) -> bytes:
     """
-    images: 预留参数，可传入二进制图片列表，后续扩展插入逻辑
+    images: {key: base64} 的图像映射
     """
     doc = Document()
     _set_page_layout(doc, template_cfg)
@@ -255,14 +279,22 @@ def render_markdown_to_docx_bytes(
 
     for typ, text, lv in blocks:
         if typ == "blank":
-            # 空行：加一个空段落（更可控）
             doc.add_paragraph("")
             continue
+
+        if typ == "p":
+            m = _IMAGE_PLACEHOLDER_RE.match(text)
+            if m and images:
+                key = m.group(1)
+                img_b64 = images.get(key)
+                img_bytes = _decode_base64_image(img_b64) if img_b64 else None
+                if img_bytes:
+                    _add_image_block(doc, img_bytes, template_cfg)
+                    continue
 
         if typ == "title":
             _add_text_paragraph(doc, text, "title", template_cfg)
         elif typ == "heading":
-            # h2->h1, h3->h2, h4+->h3
             if lv <= 2:
                 key = "h1"
             elif lv == 3:
@@ -276,11 +308,6 @@ def render_markdown_to_docx_bytes(
             _add_text_paragraph(doc, text, "body", template_cfg)
         else:
             _add_text_paragraph(doc, text, "body", template_cfg)
-
-    # ✅ 预留：未来插入图片（从 plots 或其他来源）
-    # if images:
-    #     for img_bytes in images:
-    #         doc.add_picture(BytesIO(img_bytes))
 
     buf = BytesIO()
     doc.save(buf)

@@ -267,6 +267,7 @@
   let sending = false;
   let lastCtxCheckAt = 0;
   let ctxCheckTimer = null;
+  let lastPlots = [];
 
   const chatLog = document.getElementById('chatLog');
   const plots = document.getElementById('plots');
@@ -321,6 +322,28 @@
   function getLatestAssistantMarkdown() {
     const last = [...messages].reverse().find(m => m.role === 'assistant' && (m.content || '').trim());
     return (last && last.content) ? last.content.trim() : '';
+  }
+
+  // ✅ 新增：图表 key 生成规则（必须与后端一致）
+  function slugifyKey(text) {
+    if (!text) return "chart";
+    return text
+      .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toLowerCase()
+      .slice(0, 64);
+  }
+
+  // ✅ 新增：把 plots 转成 plot_images 映射
+  function buildPlotImages(plots = []) {
+    const map = {};
+    plots.forEach(p => {
+      const key = slugifyKey(p.title);
+      if (p.image) {
+        map[key] = p.image; // base64
+      }
+    });
+    return map;
   }
 
 const payload = () => ({
@@ -380,9 +403,11 @@ const payload = () => ({
         body: JSON.stringify({
           report_markdown: reportMarkdown,
           template_id: templateId,
-          report_title: reportTitle
+          report_title: reportTitle,
+          plot_images: buildPlotImages(lastPlots)
         })
       });
+
 
       if (!res.ok) {
         let msg = '导出失败';
@@ -533,8 +558,9 @@ const payload = () => ({
     const promptText = (j.prompt || '').trim();
     promptBox.textContent = promptText || '未返回 prompt';
 
+    lastPlots = j.plots || [];
     plots.innerHTML = '';
-    (j.plots || []).forEach(item => {
+    lastPlots.forEach(item => {
       const h = document.createElement('h4');
       h.textContent = item.title;
       const img = document.createElement('img');

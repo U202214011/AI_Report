@@ -813,6 +813,9 @@ def _fallback_template() -> str:
         "{constraints_yaml}"
     )
 
+def _slugify_key(text: str) -> str:
+    t = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fa5]+", "_", str(text)).strip("_")
+    return t.lower()[:64] if t else "chart"
 
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     report_type = normalized.get("reportType", "statistical")
@@ -825,6 +828,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     dims = [d for d in dims if d in DIMENSION_LABELS_CN]
     if not dims:
         dims = ["total"]
+
     # ✅ 风格字段
     style_raw = normalized.get("reportStyle")
     report_style = REPORT_STYLE_MAP.get(style_raw, style_raw) if style_raw else None
@@ -832,11 +836,23 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
     periods = build_period_range(granularity, since, until)
 
-    chart_keys = []
+    chart_items = []
     if plots:
         for idx, plot in enumerate(plots):
-            key = plot.get("title") or f"chart_{idx + 1}"
-            chart_keys.append(key)
+            title = plot.get("title") or f"chart_{idx + 1}"
+            key = _slugify_key(title)
+            chart_items.append({
+                "key": key,
+                "title": title,
+                "placeholder": f"{{{{image:{key}}}}}"
+            })
+
+    chart_placeholders_text = "（无图表）"
+    if chart_items:
+        chart_placeholders_text = "\n".join([
+            f"- {c['title']}：{c['placeholder']}"
+            for c in chart_items
+        ])
 
     summary = {
         "reportType": report_type,
@@ -854,8 +870,8 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         "summary": summary,
         "periods": periods,
         "charts": {
-            "count": len(chart_keys),
-            "keys": chart_keys
+            "count": len(chart_items),
+            "items": chart_items
         },
         "statistical": {},
         "trend": {},
@@ -1025,7 +1041,8 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         "format_requirements": format_requirements,
         "constraints_yaml": constraints_yaml,
         "series_granularity_label": gran_label,
-        "total_series_text": total_series_text
+        "total_series_text": total_series_text,
+        "chart_placeholders_text": chart_placeholders_text
     }
 
     templates = load_templates()

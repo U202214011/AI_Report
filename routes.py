@@ -442,6 +442,7 @@ def register_routes(app):
             return jsonify(adapt_report_output(raw_output))
         except Exception as e:
             return jsonify(adapt_report_output({"message": str(e)})), 500
+
     @app.route("/api/export/templates", methods=["GET"])
     def export_templates():
         try:
@@ -460,6 +461,7 @@ def register_routes(app):
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
         report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
+        plot_images = payload.get("plot_images") or {}
 
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
@@ -469,7 +471,8 @@ def register_routes(app):
             docx_bytes = render_markdown_to_docx_bytes(
                 markdown_text=markdown_text,
                 template_cfg=cfg,
-                report_title=report_title
+                report_title=report_title,
+                images=plot_images
             )
             filename = build_export_filename(prefix=report_title, ext="docx")
             return send_file(

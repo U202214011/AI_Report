@@ -324,7 +324,6 @@
     return (last && last.content) ? last.content.trim() : '';
   }
 
-  // ✅ 新增：图表 key 生成规则（必须与后端一致）
   function slugifyKey(text) {
     if (!text) return "chart";
     return text
@@ -334,14 +333,11 @@
       .slice(0, 64);
   }
 
-  // ✅ 新增：把 plots 转成 plot_images 映射
   function buildPlotImages(plots = []) {
     const map = {};
     plots.forEach(p => {
       const key = slugifyKey(p.title);
-      if (p.image) {
-        map[key] = p.image; // base64
-      }
+      if (p.image) map[key] = p.image;
     });
     return map;
   }
@@ -555,8 +551,7 @@ const payload = () => ({
       return;
     }
 
-    const promptText = (j.prompt || '').trim();
-    promptBox.textContent = promptText || '未返回 prompt';
+    const promptText = (j.finalPrompt || j.prompt || '').trim();
 
     lastPlots = j.plots || [];
     plots.innerHTML = '';
@@ -570,13 +565,18 @@ const payload = () => ({
     });
 
     if (!promptText) {
+      promptBox.textContent = '未返回 prompt';
       const { body } = createMsg('assistant', 'content');
       appendMsgMarkdown(body, '未拿到可用 prompt，请检查 prompt 模板配置。');
       return;
     }
 
-    // prompt注入上下文，不显示到中栏
+    // 先注入上下文
     messages.push({ role:'user', content: promptText });
+
+    // 再从“实际发送内容”回显到右侧，保证一致
+    const sentPrompt = messages[messages.length - 1]?.content || '';
+    promptBox.textContent = sentPrompt;
 
     const { body } = createMsg('assistant', 'content');
     appendMsgMarkdown(body, '已基于当前筛选生成 Prompt，并发送给模型。你可以继续多轮追问。');

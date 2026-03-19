@@ -538,12 +538,17 @@ def run_aggregation(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         raise RuntimeError("数据库连接失败")
 
     sql, params = build_aggregation_query(payload)
+    print(f"[SQL_DEBUG] run_aggregation sql={sql}")
+    print(f"[SQL_DEBUG] run_aggregation params={params}")
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(sql, params)
     rows = cursor.fetchall()
+    print(f"[SQL_DEBUG] run_aggregation fetched={len(rows)} sample={rows[:3]}")
     conn.close()
 
     return _normalize_rows(rows)
+
 
 def select_top_categories(rows: List[Dict[str, Any]], dim_key: str, top_n: int) -> List[Any]:
     if not rows:

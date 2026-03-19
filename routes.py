@@ -424,12 +424,18 @@ def register_routes(app):
 
             prompt_bundle = build_prompt_bundle(normalized, plots=plots)
 
+            logger.info(f"[/api/generate] normalized={normalized}")
+            logger.info(f"[/api/generate] templateDebug={prompt_bundle.get('templateDebug', {})}")
+            logger.info(f"[/api/generate] prompt_len={len(prompt_bundle.get('prompt') or '')}")
+            logger.info(f"[/api/generate] prompt_head={(prompt_bundle.get('prompt') or '')[:300]}")
+
             raw_output = {
                 "summary": {"metric": metric, "reportType": report_type},
                 "plots": plots,
                 "tables": [],
                 "data": data,
                 "prompt": prompt_bundle.get("prompt"),
+                "finalPrompt": prompt_bundle.get("prompt"),  # 新增：统一“最终发送给LLM”的文本
                 "promptData": prompt_bundle.get("promptData"),
                 "frontendSchema": prompt_bundle.get("frontendSchema"),
                 "templateDebug": prompt_bundle.get("templateDebug", {})

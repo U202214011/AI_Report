@@ -30,19 +30,17 @@ def granularity_expression(gran: str) -> str:
         return f"DATE_FORMAT({dt}, '%Y')"
     raise ValueError(f"unknown granularity: {gran}")
 
+# 统一口径(B)：sales_amount 使用行金额
 def metric_sql(metric: str) -> str:
     if metric == 'sales_amount':
-        return "IFNULL(SUM(i.Total), 0) AS value"
+        return "IFNULL(SUM(il.UnitPrice * il.Quantity), 0) AS value"
     if metric == 'order_count':
         return "COUNT(DISTINCT i.InvoiceId) AS value"
     if metric == 'avg_order_value':
-        return "IFNULL(SUM(i.Total) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
+        return "IFNULL(SUM(il.UnitPrice * il.Quantity) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
     raise ValueError(f"unknown metric: {metric}")
 
-# 维度查询（join 到明细表）必须避免重复计数
-# - sales_amount 用 il.UnitPrice * il.Quantity
-# - order_count 用 DISTINCT invoice
-# - avg_order_value 用分子(行金额和)/分母(发票数)
+# 维度查询口径保持一致
 def metric_sql_with_lines(metric: str) -> str:
     if metric == 'sales_amount':
         return "IFNULL(SUM(il.UnitPrice * il.Quantity), 0) AS value"
@@ -214,6 +212,24 @@ def run_query(sql: str, params: List[Any]) -> List[Dict[str, Any]]:
 
 # ---------- 趋势查询 ----------
 
+def _invoice_line_from_clause() -> str:
+    return """
+    FROM Invoice i
+    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
+    """
+
+def _dimension_from_clause() -> str:
+    return """
+    FROM Invoice i
+    JOIN Customer c ON i.CustomerId = c.CustomerId
+    LEFT JOIN Employee e ON c.SupportRepId = e.EmployeeId
+    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
+    JOIN Track t ON il.TrackId = t.TrackId
+    JOIN Album al ON t.AlbumId = al.AlbumId
+    JOIN Artist ar ON al.ArtistId = ar.ArtistId
+    JOIN Genre g ON t.GenreId = g.GenreId
+    """
+
 def build_period_trend(metric: str, granularity: str, since=None, until=None) -> Tuple[str, List[Any]]:
     params = []
     where = []
@@ -231,10 +247,13 @@ def build_period_trend(metric: str, granularity: str, since=None, until=None) ->
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     period_expr = granularity_expression(granularity)
 
+    # 统一使用含 InvoiceLine 的口径（B）
+    from_clause = _invoice_line_from_clause()
+
     sql = f"""
     SELECT {period_expr} AS period,
            {metric_sql(metric)}
-    FROM Invoice i
+    {from_clause}
     {where_sql}
     GROUP BY period
     ORDER BY period ASC
@@ -259,16 +278,7 @@ def build_dimension_trend(metric: str, granularity: str, dimension: str, since=N
     period_expr = granularity_expression(granularity)
     dim_expr, dim_alias = dimension_expression(dimension)
 
-    from_clause = """
-    FROM Invoice i
-    JOIN Customer c ON i.CustomerId = c.CustomerId
-    LEFT JOIN Employee e ON c.SupportRepId = e.EmployeeId
-    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
-    JOIN Track t ON il.TrackId = t.TrackId
-    JOIN Album al ON t.AlbumId = al.AlbumId
-    JOIN Artist ar ON al.ArtistId = ar.ArtistId
-    JOIN Genre g ON t.GenreId = g.GenreId
-    """
+    from_clause = _dimension_from_clause()
 
     sql = f"""
     SELECT {period_expr} AS period,
@@ -505,16 +515,7 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
 
     select_parts.append(metric_sql_with_lines(metric))
 
-    from_clause = """
-    FROM Invoice i
-    JOIN Customer c ON i.CustomerId = c.CustomerId
-    LEFT JOIN Employee e ON c.SupportRepId = e.EmployeeId
-    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
-    JOIN Track t ON il.TrackId = t.TrackId
-    JOIN Album al ON t.AlbumId = al.AlbumId
-    JOIN Artist ar ON al.ArtistId = ar.ArtistId
-    JOIN Genre g ON t.GenreId = g.GenreId
-    """
+    from_clause = _dimension_from_clause()
 
     sql = f"SELECT {', '.join(select_parts)} {from_clause}"
     if where_clauses:
@@ -523,12 +524,9 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
         sql += " GROUP BY " + ", ".join(group_parts)
     sql += " ORDER BY value DESC"
 
-    if payload.get('topN') and report_type == 'statistical':
-        try:
-            n = int(payload.get('topN'))
-            sql += f" LIMIT {n}"
-        except Exception:
-            pass
+    # 统计聚合以A：不在SQL层LIMIT，TopN留给Python层处理
+    # if payload.get('topN') and report_type == 'statistical':
+    #     ...
 
     return sql, params
 
@@ -548,7 +546,6 @@ def run_aggregation(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     conn.close()
 
     return _normalize_rows(rows)
-
 
 def select_top_categories(rows: List[Dict[str, Any]], dim_key: str, top_n: int) -> List[Any]:
     if not rows:

@@ -49,7 +49,7 @@ STYLE_APPENDIX = {
         "【报告风格要求（归因解析型）】\n"
         "- 强调结构占比、集中度、Top贡献来源。\n"
         "- 解释主因与次因，并给出业务机制解释。\n"
-        "- 对无法验证的因果明确标注“推测”。\n"
+        "- 对无法验证的因果标注“推测”。\n"
     ),
     "statistical.forecast": (
         "【报告风格要求（预测建议型）】\n"
@@ -515,7 +515,9 @@ def _build_stat_dimension_summary(
             "total": 0.0,
             "topCategories": [],
             "ranking": [],
+            "others": {"name": "其他", "value": 0.0, "share_pct": 0.0},
             "topSharePct": 0.0,
+            "othersSharePct": 0.0,
             "maxValue": 0.0,
             "maxName": None,
             "minValue": 0.0,
@@ -523,23 +525,10 @@ def _build_stat_dimension_summary(
         }
 
     total_value = _sum_values(rows)
-
-    if not rows:
-        return {
-            "dimension": dim,
-            "dimensionLabel": DIMENSION_LABELS_CN.get(dim, dim),
-            "total": 0.0,
-            "topCategories": [],
-            "ranking": [],
-            "topSharePct": 0.0,
-            "maxValue": 0.0,
-            "maxName": None,
-            "minValue": 0.0,
-            "minName": None
-        }
-
     top_categories = select_top_categories(rows, dim, top_n) or []
+
     top_rows = [r for r in rows if r.get(dim) in top_categories] if top_categories else rows[:]
+    other_rows = [r for r in rows if r.get(dim) not in top_categories] if top_categories else []
 
     ranking = []
     for r in top_rows:
@@ -552,6 +541,10 @@ def _build_stat_dimension_summary(
 
     top_share = sum(i["share_pct"] for i in ranking)
 
+    other_value = sum(_safe_float(r.get("value")) for r in other_rows)
+    others_share = (other_value / total_value * 100.0) if total_value else 0.0
+    others_item = {"name": "其他", "value": other_value, "share_pct": others_share}
+
     max_item = max(ranking, key=lambda x: x["value"]) if ranking else None
     min_item = min(ranking, key=lambda x: x["value"]) if ranking else None
 
@@ -561,15 +554,16 @@ def _build_stat_dimension_summary(
         "total": total_value,
         "topCategories": top_categories,
         "ranking": ranking,
+        "others": others_item,
         "topSharePct": top_share,
+        "othersSharePct": others_share,
         "maxValue": (max_item or {}).get("value", 0.0),
         "maxName": (max_item or {}).get("name"),
         "minValue": (min_item or {}).get("value", 0.0),
         "minName": (min_item or {}).get("name")
     }
 
-
-def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
+def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: str) -> str:
     if not dimension_summaries:
         return "（无维度明细数据）"
 
@@ -580,14 +574,12 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
 
         label = dim_summary.get("dimensionLabel") or "维度"
 
-        # 兼容两种字段：ranking / topN
         ranking = dim_summary.get("ranking")
         if not ranking:
             ranking = dim_summary.get("topN")
         if not isinstance(ranking, list):
             ranking = []
 
-        # 过滤脏项
         ranking = [r for r in ranking if isinstance(r, dict) and (r.get("name") is not None)]
 
         if not ranking:
@@ -599,20 +591,31 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
             name = item.get("name")
             value = _safe_float(item.get("value"))
             pct = _safe_float(item.get("share_pct"))
-            lines.append(f"{idx}. {name}：{value:.2f}（占比{pct:.2f}%）")
+            lines.append(f"{idx}. {name}：{_format_metric_value(metric, value)}（占比{pct:.2f}%）")
+
+        others = dim_summary.get("others") if isinstance(dim_summary.get("others"), dict) else {}
+        others_name = others.get("name", "其他")
+        others_value = _safe_float(others.get("value"))
+        others_pct = _safe_float(others.get("share_pct"))
+
+        lines.append(f"其他：{_format_metric_value(metric, others_value)}（综合占比{others_pct:.2f}%）")
 
         max_name = dim_summary.get("maxName")
         min_name = dim_summary.get("minName")
         max_val = _safe_float(dim_summary.get("maxValue"))
         min_val = _safe_float(dim_summary.get("minValue"))
 
-        lines.append(f"最大值：{max_name}（{max_val:.2f}）")
-        lines.append(f"最小值：{min_name}（{min_val:.2f}）")
+        lines.append(f"TopN合计占比：{_safe_float(dim_summary.get('topSharePct')):.2f}%")
+        lines.append(f"其他合计占比：{_safe_float(dim_summary.get('othersSharePct')):.2f}%")
+        lines.append(f"最大值：{max_name}（{_format_metric_value(metric, max_val)}）")
+        lines.append(f"最小值：{min_name}（{_format_metric_value(metric, min_val)}）")
+        lines.append("口径说明：以上“其他”为除TopN外所有类别的合并项，禁止重新拆分或复算。")
         blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks) if blocks else "（无维度明细数据）"
 
-def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> str:
+
+def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: str) -> str:
     if not dimension_summaries:
         return "（无维度明细数据）"
     blocks = []
@@ -638,16 +641,30 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]]) -> s
             peak = cat.get("peakValley", {}).get("peak")
             valley = cat.get("peakValley", {}).get("valley")
             share = cat.get("sharePct") or 0
-            contrib = cat.get("growthContributionPct") or 0
+            growth_val = _safe_float(cat.get("growthValue"))
+            contrib_signed = _safe_float(cat.get("growthContributionPctSigned"))
+            contrib_abs = _safe_float(cat.get("growthContributionPctAbs"))
 
             lines.append(f"{idx}. {name}：占比{share:.2f}%；趋势{trend}；波动标准差{std:.2f}，变异系数{coef:.2f}")
-            lines.append(f"   - 增长贡献率：{contrib:.2f}%")
+
+            sign = "+" if growth_val > 0 else ""
+            lines.append(f"   - 首末期变化：{sign}{_format_metric_value(metric, growth_val)}")
+            lines.append(f"   - 净增长贡献率（带符号）：{contrib_signed:+.2f}%")
+            lines.append(f"   - 影响贡献率（绝对值）：{contrib_abs:.2f}%")
+
             if max_growth:
-                lines.append(f"   - 最大环比：{max_growth.get('fromPeriod')}→{max_growth.get('toPeriod')}（+{max_growth.get('change', 0):.2f}）")
+                lines.append(
+                    f"   - 最大环比：{max_growth.get('fromPeriod')}→{max_growth.get('toPeriod')}（{_format_metric_value(metric, _safe_float(max_growth.get('change', 0)))}）"
+                )
             if min_growth:
-                lines.append(f"   - 最小环比：{min_growth.get('fromPeriod')}→{min_growth.get('toPeriod')}（{min_growth.get('change', 0):.2f}）")
+                lines.append(
+                    f"   - 最小环比：{min_growth.get('fromPeriod')}→{min_growth.get('toPeriod')}（{_format_metric_value(metric, _safe_float(min_growth.get('change', 0)))}）"
+                )
             if peak and valley:
-                lines.append(f"   - 峰值：{peak.get('period')}（{_safe_float(peak.get('value')):.2f}）；谷值：{valley.get('period')}（{_safe_float(valley.get('value')):.2f}）")
+                lines.append(
+                    f"   - 峰值：{peak.get('period')}（{_format_metric_value(metric, _safe_float(peak.get('value')))}）；"
+                    f"谷值：{valley.get('period')}（{_format_metric_value(metric, _safe_float(valley.get('value')))}）"
+                )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -736,8 +753,13 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
             min_growth_cat = _min_growth_period(data)
             peak_valley_cat = _extract_peak_valley(data)
             share_pct = (totals_map.get(label, 0.0) / total_all * 100) if total_all else 0.0
+            net_growth_total = sum(cat_growths)  # 可能为正/负/0
+
             cat_growth = cat_growths[idx] if idx < len(cat_growths) else 0.0
-            growth_contrib = abs(cat_growth) / total_abs_growth * 100 if total_abs_growth else 0.0
+            # 1) 带符号净贡献率
+            growth_contrib_signed = (cat_growth / net_growth_total * 100) if net_growth_total else 0.0
+            # 2) 绝对贡献率（可选保留，衡量“影响大小”）
+            growth_contrib_abs = (abs(cat_growth) / total_abs_growth * 100) if total_abs_growth else 0.0
 
             categories.append({
                 "name": label,
@@ -748,7 +770,9 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
                 "minGrowthPeriod": min_growth_cat,
                 "peakValley": peak_valley_cat,
                 "sharePct": share_pct,
-                "growthContributionPct": growth_contrib
+                "growthValue": cat_growth,  # 新增：首末期变化值（带符号）
+                "growthContributionPctSigned": growth_contrib_signed,  # 新增：带符号净贡献率
+                "growthContributionPctAbs": growth_contrib_abs  # 可选：绝对贡献率
             })
 
         dim_summaries.append({
@@ -782,6 +806,46 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
         "natural_fragments": {"overview_sentence": overview_sentence}
     }
 
+def _metric_unit(metric: str) -> str:
+    if metric == "sales_amount":
+        return "元"
+    if metric == "order_count":
+        return "笔"
+    if metric == "avg_order_value":
+        return "元/笔"
+    return "数值"
+
+def _metric_name_cn(metric: str) -> str:
+    return METRIC_LABELS_CN.get(metric, metric)
+
+def _build_metric_semantics(metric: str) -> Dict[str, str]:
+    metric_cn = METRIC_LABELS_CN.get(metric, metric)
+
+    if metric == "sales_amount":
+        unit = "元"
+        definition = "销售额=时间范围内订单行金额合计（Σ UnitPrice×Quantity）"
+        share_denominator = "总体销售额"
+        trend_growth_definition = "趋势型增长率=（本期销售额-上期销售额）/上期销售额 × 100%"
+    elif metric == "order_count":
+        unit = "笔"
+        definition = "订单量=去重订单数（COUNT DISTINCT InvoiceId）"
+        share_denominator = "总体订单量"
+        trend_growth_definition = "趋势型增长率=（本期订单量-上期订单量）/上期订单量 × 100%"
+    else:
+        unit = "元/笔"
+        definition = "客单价=销售额/订单量（总销售额÷总订单数）"
+        share_denominator = "维度结构展示时按该指标汇总口径计算"
+        trend_growth_definition = "趋势型增长率=（本期客单价-上期客单价）/上期客单价 × 100%"
+
+    return {
+        "metric_name": metric_cn,
+        "metric_unit": unit,
+        "metric_definition": definition,
+        "share_denominator": share_denominator,
+        "trend_growth_definition": trend_growth_definition,
+        "value_interpretation": f"凡未特别说明，数值字段均表示“{metric_cn}”，单位“{unit}”。",
+        "no_revalidation_note": "口径已在上文固定，禁止对占比与增长率定义进行二次验证或改写。"
+    }
 
 def _format_metric_value(metric: str, value: float) -> str:
     if metric == "order_count":
@@ -821,7 +885,6 @@ def _fallback_template() -> str:
     )
 
 
-
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     try:
         report_type = normalized.get("reportType", "statistical")
@@ -846,6 +909,8 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
         periods = build_period_range(granularity, since, until)
 
+        # 新增：用于模板中统一说明单位与口径
+        metric_semantics = _build_metric_semantics(metric)
 
         summary = {
             "reportType": report_type,
@@ -937,23 +1002,24 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         total_orders = _compute_total_metric("order_count", granularity, since, until)
         avg_order = total_sales / total_orders if total_orders else 0.0
 
+        # 当前指标总量（按用户选择metric）
         if metric == "sales_amount":
-            total_value_text = f"{total_sales:,.2f} 元"
+            total_value_num = total_sales
         elif metric == "order_count":
-            total_value_text = f"{total_orders:,.0f} 笔"
+            total_value_num = total_orders
         else:
-            total_value_text = f"{avg_order:,.2f} 元/笔"
+            total_value_num = avg_order
 
         key_metrics = {
-            "total_value_text": total_value_text,
+            "total_value_text": _format_metric_value(metric, total_value_num),
             "transaction_count": f"{total_orders:,.0f}",
-            "avg_order_value_text": f"{avg_order:,.2f} 元",
-            "period_mean_text": f"{basic_stats.get('mean', 0.0):,.2f}",
-            "period_max_text": f"{basic_stats.get('max', 0.0):,.2f}",
+            "avg_order_value_text": _format_metric_value("avg_order_value", avg_order),
+            "period_mean_text": _format_metric_value(metric, basic_stats.get("mean", 0.0)),
+            "period_max_text": _format_metric_value(metric, basic_stats.get("max", 0.0)),
             "period_max_period": max_period or "N/A",
-            "period_min_text": f"{basic_stats.get('min', 0.0):,.2f}",
+            "period_min_text": _format_metric_value(metric, basic_stats.get("min", 0.0)),
             "period_min_period": min_period or "N/A",
-            "period_median_text": f"{basic_stats.get('median', 0.0):,.2f}",
+            "period_median_text": _format_metric_value(metric, basic_stats.get("median", 0.0)),
             "period_median_period": median_period or "N/A"
         }
 
@@ -966,7 +1032,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             dim_summaries = llm_data.get("dimensionsSummary") if isinstance(llm_data, dict) else []
             dim_summaries = dim_summaries or []
             dim_label = "、".join([d.get("dimensionLabel") for d in dim_summaries if isinstance(d, dict) and d.get("dimensionLabel")]) or "维度"
-            dim_table = _build_dim_table_texts(dim_summaries)
+            dim_table = _build_dim_table_texts(dim_summaries, metric)
         else:
             task_definition = {
                 "analysis_type": "趋势型",
@@ -976,7 +1042,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             dim_summaries = llm_data.get("dimensionsSummary") if isinstance(llm_data, dict) else []
             dim_summaries = dim_summaries or []
             dim_label = "、".join([d.get("dimensionLabel") for d in dim_summaries if isinstance(d, dict) and d.get("dimensionLabel")]) or "维度"
-            dim_table = _build_trend_dim_table_texts(dim_summaries)
+            dim_table = _build_trend_dim_table_texts(dim_summaries, metric)
 
         format_requirements = {
             "sections": "概览/维度关键发现/原因分析/建议",
@@ -993,6 +1059,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             "task_definition": task_definition,
             "data_summary": llm_data,
             "key_metrics": key_metrics,
+            "metric_semantics": metric_semantics,  # 新增：模板可直接引用单位/口径
             "dimension_analysis": {
                 "dim_label": dim_label
             },

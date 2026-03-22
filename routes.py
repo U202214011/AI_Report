@@ -465,14 +465,45 @@ def register_routes(app):
         report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
         plot_images = payload.get("plot_images") or {}
 
+        # ✅ 新增：接收本次维度（建议前端传 normalized.dimensions）
+        # 例如: ["total","artist","country"] 或 ["artist","country"]
+        selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
+
+        # 维度标题映射（与 prompt_data 保持一致）
+        dim_title_map = {
+            "genre": "流派",
+            "artist": "艺术家",
+            "country": "国家",
+            "city": "城市",
+            "customer": "客户",
+            "employee": "员工"
+        }
+
+        selected_dimensions = []
+        for k in selected_dim_keys:
+            kk = str(k).strip().lower()
+            if kk == "total":
+                continue
+            if kk in dim_title_map:
+                selected_dimensions.append({
+                    "key": kk,
+                    "title": dim_title_map[kk],
+                    "aliases": [kk, dim_title_map[kk]]
+                })
+
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
 
         try:
-            markdown_text, inject_debug = inject_placeholders_by_sections(markdown_text, plot_images)
+            markdown_text, inject_debug = inject_placeholders_by_sections(
+                markdown_text=markdown_text,
+                images=plot_images,
+                selected_dimensions=selected_dimensions
+            )
 
-            # ✅ 导出时打印每个 key 去向
-            logger.info("[EXPORT][anchors] %s", inject_debug.get("anchors"))
+            logger.info("[EXPORT][main_sections] %s", inject_debug.get("main_sections"))
+            logger.info("[EXPORT][dimension_sections] %s", inject_debug.get("dimension_sections"))
+
             for item in inject_debug.get("inserted", []):
                 logger.info(
                     "[EXPORT][inserted] key=%s section=%s insert_after_line=%s actual_placeholder_line=%s",

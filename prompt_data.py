@@ -871,8 +871,6 @@ def _fallback_template() -> str:
         "{total_series_text}\n\n"
         "【维度结构（{dimension_analysis[dim_label]}）】\n"
         "{dim_table}\n\n"
-        "【图表占位符（请在最终输出中原样保留以下占位符，不得改写、删除）】\n"
-        "{chart_placeholders_text}\n\n"
         "【数据局限】\n"
         "{limitations_note}\n\n"
         "【输出要求】\n"
@@ -881,9 +879,114 @@ def _fallback_template() -> str:
         "数字格式：{format_requirements[number_format]}\n"
         "字数：{format_requirements[length_limit]}\n\n"
         "【强制约束】\n"
-        "{constraints_yaml}"
+        "{constraints_yaml}\n\n"
+        "【Markdown结构硬约束】\n"
+        "{markdown_constraints}"
     )
 
+def _build_selected_dimensions_block(dims: List[str]) -> Dict[str, Any]:
+    """
+    从 normalized.dimensions 生成本次维度约束数据（排除 total）
+    """
+    selected_keys = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
+    selected_titles = [DIMENSION_LABELS_CN[k] for k in selected_keys]
+    return {
+        "selected_keys": selected_keys,
+        "selected_titles": selected_titles,
+        "selected_titles_joined": "、".join(selected_titles) if selected_titles else "无",
+        "selected_h2_lines": "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else ""
+    }
+
+
+def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
+    """
+    输出给模板变量 {markdown_constraints} 的硬约束文本
+    """
+    base = (
+        "1) 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
+        "2) 一级标题必须严格且按以下顺序输出，名称必须完全一致：\n"
+        "# 概览\n"
+        "# 维度关键发现\n"
+        "# 原因分析\n"
+        "# 建议\n"
+        "3) 除“维度关键发现”外，其他一级标题下不要创建维度型二级标题。\n"
+    )
+
+    if selected_dim_titles:
+        dim_lines = "\n".join([f"## {t}" for t in selected_dim_titles])
+        dim_part = (
+            "4) 在“维度关键发现”章节下，只能使用以下二级标题（名称必须完全一致）：\n"
+            f"{dim_lines}\n"
+            "5) 不得输出未在上述列表中的维度二级标题。\n"
+            "6) 若某个允许维度数据不足，可在该标题下说明“数据不足”，但不能改标题、不能删标题。\n"
+        )
+    else:
+        dim_part = (
+            "4) 本次未选择维度。在“维度关键发现”下不要输出二级标题，可写“本次未选择维度分析”。\n"
+            "5) 不得新增任何维度型二级标题。\n"
+        )
+
+    tail = "7) 不要输出任何图片占位符（如 {{image:...}}）,图片由系统后处理插入。"
+    return base + dim_part + tail
+
+
+def _build_selected_dimensions_block(dims: List[str]) -> Dict[str, Any]:
+    """
+    从 normalized.dimensions 构建本次可用维度（排除 total）
+    返回:
+    {
+      "selected_keys": [...],
+      "selected_titles": [...],
+      "selected_h2_lines": "## 艺术家\n## 国家",
+      "selected_titles_joined": "艺术家、国家"
+    }
+    """
+    selected_keys: List[str] = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
+    selected_titles: List[str] = [DIMENSION_LABELS_CN[k] for k in selected_keys]
+    selected_h2_lines = "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else "（本次未选择维度）"
+    selected_titles_joined = "、".join(selected_titles) if selected_titles else "无"
+    return {
+        "selected_keys": selected_keys,
+        "selected_titles": selected_titles,
+        "selected_h2_lines": selected_h2_lines,
+        "selected_titles_joined": selected_titles_joined
+    }
+
+
+def _build_markdown_structure_constraints(selected_titles: List[str]) -> str:
+    """
+    追加到 prompt 尾部的“硬约束”文本，强制 LLM 输出稳定 Markdown 结构
+    """
+    if selected_titles:
+        h2_lines = "\n".join([f"## {t}" for t in selected_titles])
+        selected_text = "、".join(selected_titles)
+        dim_rule = (
+            "4. 在“维度关键发现章节下，只能使用以下二级标题，且标题名称必须完全一致：\n"
+            f"{h2_lines}\n"
+            "5. 不要输出未在上述列表中的任何维度二级标题。\n"
+            "6. 若某个允许维度数据不足，可在该标题下写“数据不足”并简述原因，但不要删标题或改标题。\n"
+        )
+    else:
+        selected_text = "无"
+        dim_rule = (
+            "4. 本次未选择任何维度。在“维度关键发现”章节下不要输出任何二级标题，可写“本次未选择维度分析”。\n"
+            "5. 不要新增任何维度型二级标题。\n"
+        )
+
+    return (
+        "【Markdown结构强约束（必须严格遵守）】\n"
+        "1. 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
+        "2. 一级标题必须且仅能按以下顺序输出：\n"
+        "# 概览\n"
+        "# 维度关键发现\n"
+        "# 原因分析\n"
+        "# 建议\n"
+        "3. 标题名称必须完全一致，不允许使用“概述/关键发现总结/对策建议”等近义词替换。\n"
+        f"{dim_rule}"
+        "7. 除“维度关键发现”外，其他一级标题下不要创建维度型二级标题。\n"
+        "8. 不要输出任何图片占位符（如 {{image:...}}），图片将由系统后处理插入。\n"
+        f"9. 本次允许维度：{selected_text}。\n"
+    )
 
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     try:
@@ -895,6 +998,13 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         until = normalized.get("until")
         dims = normalized.get("dimensions") or ["total"]
         dims = [d for d in dims if d in DIMENSION_LABELS_CN] or ["total"]
+        # ✅ 新增：动态维度结构约束数据
+        selected_dims_block = _build_selected_dimensions_block(dims)
+        selected_dim_titles = selected_dims_block["selected_titles"]
+        markdown_constraints = _build_markdown_constraints_text(selected_dim_titles)
+        # ✅ 新增：本次选中维度（排除 total）
+        selected_dims_info = _build_selected_dimensions_block(dims)
+        selected_dimension_titles = selected_dims_info["selected_titles"]
 
         style_raw = normalized.get("reportStyle")
         report_style = None
@@ -909,7 +1019,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
         periods = build_period_range(granularity, since, until)
 
-        # 新增：用于模板中统一说明单位与口径
         metric_semantics = _build_metric_semantics(metric)
 
         summary = {
@@ -1002,7 +1111,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         total_orders = _compute_total_metric("order_count", granularity, since, until)
         avg_order = total_sales / total_orders if total_orders else 0.0
 
-        # 当前指标总量（按用户选择metric）
         if metric == "sales_amount":
             total_value_num = total_sales
         elif metric == "order_count":
@@ -1059,21 +1167,24 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             "task_definition": task_definition,
             "data_summary": llm_data,
             "key_metrics": key_metrics,
-            "metric_semantics": metric_semantics,  # 新增：模板可直接引用单位/口径
+            "metric_semantics": metric_semantics,
             "dimension_analysis": {
-                "dim_label": dim_label
+                "dim_label": dim_label,
+                "selected_titles_joined": selected_dims_block.get("selected_titles_joined", "无"),
+                "selected_h2_lines": selected_dims_block.get("selected_h2_lines", "")
             },
             "dim_table": dim_table,
             "limitations_note": limitations_note,
             "format_requirements": format_requirements,
             "constraints_yaml": constraints_yaml,
             "series_granularity_label": gran_label,
-            "total_series_text": total_series_text
-            # ✅ 删除 "chart_placeholders_text": chart_placeholders_text
+            "total_series_text": total_series_text,
+
+            # ✅ 新增：给 prompt_templates.json 里的 {markdown_constraints} 使用
+            "markdown_constraints": markdown_constraints
         }
 
         templates = load_templates()
-
         template_text = pick_template(style_key, templates)
         if not (template_text or "").strip():
             template_text = pick_template(report_type, templates)

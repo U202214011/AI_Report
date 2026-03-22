@@ -387,6 +387,11 @@ const payload = () => ({
     const templateId = exportTemplateSelect.value || 'cn_management_a4';
     const reportTitle = (exportTitleInput.value || '').trim() || 'Chinook 数据分析报告';
 
+    // ✅ 新增：当前选中的维度
+    const selectedDimensions = Array.from(
+      document.querySelectorAll('input[name="dimension"]:checked')
+    ).map(x => x.value);
+
     const btn = document.getElementById('exportBtn');
     const oldText = btn.textContent;
     btn.disabled = true;
@@ -400,10 +405,11 @@ const payload = () => ({
           report_markdown: reportMarkdown,
           template_id: templateId,
           report_title: reportTitle,
-          plot_images: buildPlotImages(lastPlots)
+          plot_images: buildPlotImages(lastPlots),
+          // ✅ 关键参数：给后端动态维度匹配使用
+          selected_dimensions: selectedDimensions
         })
       });
-
 
       if (!res.ok) {
         let msg = '导出失败';
@@ -429,7 +435,7 @@ const payload = () => ({
       a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('导出失败：' + (e.message || e));
+      alert('导出失败' + (e.message || e));
     } finally {
       btn.disabled = false;
       btn.textContent = oldText;

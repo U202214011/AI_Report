@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import Dict, Any, List, Tuple, Optional, Set
 import os
 import re
@@ -260,49 +259,213 @@ def _decode_base64_image(b64: str) -> Optional[bytes]:
     except Exception:
         return None
 
+# 先在 import 行补充:
+# from typing import Dict, Any, List, Tuple, Optional, Set
+# 已有，无需额外改 typing
 
-# ---------------------------
-# 导出前：按章节语义注入占位符
-# ---------------------------
+# 在 _decode_base64_image 下方，新增以下辅助函数
 
-def _collect_dimension_anchors(lines: List[str]) -> Dict[str, int]:
-    anchors: Dict[str, int] = {}
-    patterns = {
-        "genre": [r"\bgenre\b", r"流派"],
-        "artist": [r"\bartist\b", r"艺术家"],
-        "country": [r"\bcountry\b", r"国家"],
-        "city": [r"\bcity\b", r"城市"],
-        "customer": [r"\bcustomer\b", r"客户"],
-        "employee": [r"\bemployee\b", r"员工"],
-    }
+_HEADING_LINE_RE = re.compile(r'^(#{1,6})\s+(.*?)\s*$')
+
+_DIMENSION_ALIAS_DEFAULT: Dict[str, List[str]] = {
+    "genre": ["genre", "流派", "音乐流派"],
+    "artist": ["artist", "艺术家"],
+    "country": ["country", "国家"],
+    "city": ["city", "城市"],
+    "customer": ["customer", "客户"],
+    "employee": ["employee", "员工"]
+}
+
+_DIMENSION_TITLE_DEFAULT: Dict[str, str] = {
+    "genre": "流派",
+    "artist": "艺术家",
+    "country": "国家",
+    "city": "城市",
+    "customer": "客户",
+    "employee": "员工"
+}
+
+
+def _normalize_text_compact(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").strip())
+
+
+def _parse_headings(lines: List[str]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
     for i, raw in enumerate(lines):
-        t = (raw or "").strip().lower()
-        if not t:
+        m = _HEADING_LINE_RE.match((raw or "").strip())
+        if not m:
             continue
-        for dim, pats in patterns.items():
-            if dim in anchors:
+        level = len(m.group(1))
+        text = m.group(2).strip()
+        out.append({
+            "line_index": i,
+            "level": level,
+            "text": text,
+            "norm": _normalize_text_compact(text)
+        })
+    return out
+
+
+def _build_dimension_maps(
+    selected_dimensions: Optional[List[Dict[str, Any]]]
+) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    """
+    返回:
+    - dim_key -> 标题中文
+    - dim_key -> aliases
+    """
+    if not selected_dimensions:
+        return dict(_DIMENSION_TITLE_DEFAULT), dict(_DIMENSION_ALIAS_DEFAULT)
+
+    title_map: Dict[str, str] = {}
+    alias_map: Dict[str, List[str]] = {}
+
+    for item in selected_dimensions:
+        if not isinstance(item, dict):
+            continue
+        k = str(item.get("key") or "").strip().lower()
+        t = str(item.get("title") or "").strip()
+        aliases = item.get("aliases") or []
+
+        if not k:
+            continue
+        if not t:
+            t = _DIMENSION_TITLE_DEFAULT.get(k, k)
+
+        alias_list = [k, t] + [str(a).strip() for a in aliases if str(a).strip()]
+        # 合并默认别名
+        alias_list += _DIMENSION_ALIAS_DEFAULT.get(k, [])
+        # 去重
+        seen = set()
+        cleaned = []
+        for a in alias_list:
+            aa = a.lower()
+            if aa in seen:
                 continue
-            for p in pats:
-                if re.search(p, t, flags=re.IGNORECASE):
-                    anchors[dim] = i
-                    break
-    return anchors
+            seen.add(aa)
+            cleaned.append(a)
+
+        title_map[k] = t
+        alias_map[k] = cleaned
+
+    return title_map, alias_map
+
+
+def _find_main_sections(headings: List[Dict[str, Any]], total_lines: int) -> Dict[str, Dict[str, Any]]:
+    """
+    识别一级标题分段:
+    overview/findings/cause/advice
+    """
+    seq: List[Tuple[str, int, str]] = []
+    for h in headings:
+        if h["level"] != 1:
+            continue
+        n = h["norm"]
+        if n == "概览":
+            seq.append(("overview", h["line_index"], h["text"]))
+        elif n == "维度关键发现":
+            seq.append(("findings", h["line_index"], h["text"]))
+        elif n == "原因分析":
+            seq.append(("cause", h["line_index"], h["text"]))
+        elif n == "建议":
+            seq.append(("advice", h["line_index"], h["text"]))
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for i, (name, start, title) in enumerate(seq):
+        end = total_lines - 1
+        if i + 1 < len(seq):
+            end = seq[i + 1][1] - 1
+        result[name] = {"start": start, "end": end, "title": title}
+    return result
+
+
+def _find_dimension_sections_in_findings(
+    headings: List[Dict[str, Any]],
+    findings_start: int,
+    findings_end: int,
+    dim_title_map: Dict[str, str]
+) -> Dict[str, Dict[str, Any]]:
+    """
+    在 # 维度关键发现 范围内，只识别 level=2 的维度标题
+    """
+    title_to_dim = {_normalize_text_compact(v): k for k, v in dim_title_map.items()}
+    found: List[Tuple[str, int, str]] = []
+
+    for h in headings:
+        if h["level"] != 2:
+            continue
+        if not (findings_start <= h["line_index"] <= findings_end):
+            continue
+        dim = title_to_dim.get(h["norm"])
+        if not dim:
+            continue
+        found.append((dim, h["line_index"], h["text"]))
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for i, (dim, start, title) in enumerate(found):
+        end = findings_end
+        if i + 1 < len(found):
+            end = found[i + 1][1] - 1
+        result[dim] = {"start": start, "end": end, "title": title}
+    return result
+
+
+def _chart_rank_for_insert(key: str) -> int:
+    """
+    你的需求：总量柱状图与折线图优先
+    排序: bar -> line -> pie -> other
+    """
+    k = (key or "").lower()
+    if ("bar" in k) or ("柱状" in k):
+        return 1
+    if ("line" in k) or ("趋势" in k) or ("折线" in k):
+        return 2
+    if ("pie" in k) or ("饼" in k):
+        return 3
+    return 9
+
+
+def _is_overview_chart_key(key: str) -> bool:
+    k = (key or "").lower()
+    return any(x in k for x in ["total", "总量", "overview", "summary", "概览", "总体"])
+
+
+def _infer_dim_from_key(key: str, dim_alias_map: Dict[str, List[str]]) -> Optional[str]:
+    k = (key or "").lower()
+    for dim, aliases in dim_alias_map.items():
+        for a in aliases:
+            if str(a).lower() in k:
+                return dim
+    return None
 
 
 def inject_placeholders_by_sections(
     markdown_text: str,
-    images: Dict[str, str] | None
+    images: Dict[str, str] | None,
+    selected_dimensions: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[str, Dict[str, Any]]:
     """
-    返回: (注入后的markdown, debug信息)
+    按 markdown 标题层级注入占位符（稳定版）：
+    - 总量柱状图/折线图 -> # 概览
+    - 维度图 -> # 维度关键发现 下对应 ## 维度标题
+    - 未匹配 -> 附录
+
+    selected_dimensions:
+    [
+      {"key":"artist","title":"艺术家","aliases":["artist","艺术家"]},
+      ...
+    ]
     """
     debug: Dict[str, Any] = {
-        "anchors": {},
+        "main_sections": {},
+        "dimension_sections": {},
         "inserted": [],
         "existing_placeholders": [],
         "unmatched_to_appendix": [],
         "input_image_keys": [],
-        "final_image_keys": []
+        "final_image_keys": [],
+        "selected_dimensions": selected_dimensions or []
     }
 
     if not markdown_text:
@@ -314,11 +477,11 @@ def inject_placeholders_by_sections(
     keys = [k for k, v in (images or {}).items() if v]
     debug["input_image_keys"] = list(keys)
 
+    # 已存在占位符去重
     existing: Set[str] = set()
     for ln in lines:
         found = re.findall(r"\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}", ln or "")
-        for x in found:
-            existing.add(x)
+        existing.update(found)
     debug["existing_placeholders"] = sorted(existing)
 
     keys = [k for k in keys if k not in existing]
@@ -326,72 +489,71 @@ def inject_placeholders_by_sections(
     if not keys:
         return "\n".join(lines), debug
 
-    def key_dim(k: str) -> Optional[str]:
-        kk = (k or "").lower()
-        if "genre" in kk or "流派" in kk:
-            return "genre"
-        if "artist" in kk or "艺术家" in kk:
-            return "artist"
-        if "country" in kk or "国家" in kk:
-            return "country"
-        if "city" in kk or "城市" in kk:
-            return "city"
-        if "customer" in kk or "客户" in kk:
-            return "customer"
-        if "employee" in kk or "员工" in kk:
-            return "employee"
-        return None
+    # 维度映射（动态）
+    dim_title_map, dim_alias_map = _build_dimension_maps(selected_dimensions)
 
-    def is_total(k: str) -> bool:
-        kk = (k or "").lower()
-        return ("总量" in kk) or ("total" in kk)
+    # 解析标题结构
+    headings = _parse_headings(lines)
+    main_sections = _find_main_sections(headings, len(lines))
+    debug["main_sections"] = main_sections
 
-    def sort_chart_keys(ks: List[str]) -> List[str]:
-        def score(x: str):
-            xx = x.lower()
-            if "趋势" in xx or "line" in xx:
-                return 1
-            if "柱状图" in xx or "bar" in xx:
-                return 2
-            if "饼图" in xx or "pie" in xx:
-                return 3
-            return 9
-        return sorted(ks, key=lambda s: (score(s), s))
+    dim_sections: Dict[str, Dict[str, Any]] = {}
+    findings_sec = main_sections.get("findings")
+    if findings_sec:
+        dim_sections = _find_dimension_sections_in_findings(
+            headings=headings,
+            findings_start=findings_sec["start"],
+            findings_end=findings_sec["end"],
+            dim_title_map=dim_title_map
+        )
+    debug["dimension_sections"] = dim_sections
 
-    overview_idx = 0
-    overview_title = "文档开头"
-    for i, ln in enumerate(lines):
-        tt = (ln or "").strip()
-        if any(x in tt for x in ["一、概览", "概览", "核心指标", "数据事实", "概述"]):
-            overview_idx = i
-            overview_title = tt[:50]
-            break
+    # 分类图片
+    overview_keys: List[str] = []
+    dim_groups: Dict[str, List[str]] = {}
+    remain_keys: List[str] = []
 
-    dim_anchors = _collect_dimension_anchors(lines)
+    for k in keys:
+        if _is_overview_chart_key(k):
+            overview_keys.append(k)
+            continue
+        dim = _infer_dim_from_key(k, dim_alias_map)
+        if dim:
+            dim_groups.setdefault(dim, []).append(k)
+        else:
+            remain_keys.append(k)
 
-    debug["anchors"] = {
-        "overview": {"line": overview_idx + 1, "title": overview_title},
-        "dimensions": {
-            d: {"line": idx + 1, "title": (lines[idx].strip() if 0 <= idx < len(lines) else "")}
-            for d, idx in dim_anchors.items()
-        }
-    }
+    overview_keys = sorted(overview_keys, key=lambda x: (_chart_rank_for_insert(x), x))
+    for d in list(dim_groups.keys()):
+        dim_groups[d] = sorted(dim_groups[d], key=lambda x: (_chart_rank_for_insert(x), x))
 
+    # 构建插入计划 (insert_after_line_index, key, placeholder, section)
     inserts: List[Tuple[int, str, str, str]] = []
     placed: Set[str] = set()
 
-    for k in sort_chart_keys([x for x in keys if is_total(x)]):
-        inserts.append((overview_idx, k, f"{{{{image:{k}}}}}", "overview"))
-        placed.add(k)
+    # 1) 概览插图
+    if overview_keys and "overview" in main_sections:
+        anchor = main_sections["overview"]["start"]
+        for k in overview_keys:
+            inserts.append((anchor, k, f"{{{{image:{k}}}}}", "overview"))
+            placed.add(k)
+    else:
+        # 找不到概览则暂放 remain
+        for k in overview_keys:
+            remain_keys.append(k)
 
-    for dim in ["genre", "artist", "country", "city", "customer", "employee"]:
-        anchor = dim_anchors.get(dim, -1)
-        dkeys = sort_chart_keys([x for x in keys if key_dim(x) == dim and x not in placed])
-        if anchor >= 0:
-            for k in dkeys:
-                inserts.append((anchor, k, f"{{{{image:{k}}}}}", f"dimension:{dim}"))
-                placed.add(k)
+    # 2) 维度插图（必须能匹配到对应 ## 维度标题）
+    for dim, ks in dim_groups.items():
+        sec = dim_sections.get(dim)
+        if not sec:
+            remain_keys.extend(ks)
+            continue
+        anchor = sec["start"]
+        for k in ks:
+            inserts.append((anchor, k, f"{{{{image:{k}}}}}", f"dimension:{dim}"))
+            placed.add(k)
 
+    # 3) 执行插入（按 anchor 升序 + offset）
     offset = 0
     for idx, key, ph, section in sorted(inserts, key=lambda it: it[0]):
         pos = idx + 1 + offset
@@ -406,23 +568,25 @@ def inject_placeholders_by_sections(
         })
         offset += 3
 
-    remain = [k for k in keys if k not in placed]
-    if remain:
+    # 4) 兜底附录
+    true_remain = [k for k in keys if k not in placed]
+    if true_remain:
         lines.append("")
-        lines.append("## 附录：图表")
+        lines.append("# 附录：图表")
         appendix_header_line = len(lines)
-        for k in sort_chart_keys(remain):
+        for k in sorted(true_remain, key=lambda x: (_chart_rank_for_insert(x), x)):
+            lines.append("")
             lines.append(f"{{{{image:{k}}}}}")
+            lines.append("")
             debug["inserted"].append({
                 "key": k,
                 "section": "appendix",
                 "insert_after_line": appendix_header_line,
-                "actual_placeholder_line": len(lines)
+                "actual_placeholder_line": len(lines) - 1
             })
             debug["unmatched_to_appendix"].append(k)
 
     return "\n".join(lines), debug
-
 
 # ---------------------------
 # markdown -> docx

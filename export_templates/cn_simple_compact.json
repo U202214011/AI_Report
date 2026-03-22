@@ -1,17 +1,78 @@
 {
   "id": "cn_simple_compact",
-  "name": "数据报告-A4（微软雅黑/宋体）",
-  "description": "中文管理汇报风格，标题突出，正文易读",
+  "name": "数据报告-A4（宋体/楷体）",
+  "description": "数据分析报告风格，行距紧凑，适合数据密集型内容",
   "page": {
     "size": "A4",
-    "margin_cm": [2.5, 2.2, 2.5, 2.2]
+    "margin_cm": [2.0, 1.8, 2.0, 1.8]
   },
   "fonts": {
     "title": { "family": "宋体", "size_pt": 20, "bold": true },
-    "h1": { "family": "宋体", "size_pt": 18, "bold": true },
-    "h2": { "family": "宋体", "size_pt": 15, "bold": true },
-    "h3": { "family": "宋体", "size_pt": 13, "bold": true },
-    "body": { "family": "楷体", "size_pt": 12, "bold": false }
+    "h1":    { "family": "宋体", "size_pt": 16, "bold": true },
+    "h2":    { "family": "宋体", "size_pt": 14, "bold": true },
+    "h3":    { "family": "宋体", "size_pt": 12, "bold": true },
+    "h4":    { "family": "宋体", "size_pt": 11, "bold": true },
+    "body":  { "family": "楷体", "size_pt": 11, "bold": false },
+    "list":  { "family": "楷体", "size_pt": 11, "bold": false }
+  },
+  "paragraph_styles": {
+    "title": {
+      "alignment": "center",
+      "line_spacing": 1.15,
+      "space_before_pt": 0,
+      "space_after_pt": 24,
+      "first_line_indent_chars": 0,
+      "keep_with_next": true
+    },
+    "h1": {
+      "alignment": "left",
+      "line_spacing": 1.15,
+      "space_before_pt": 14,
+      "space_after_pt": 4,
+      "first_line_indent_chars": 0,
+      "keep_with_next": true
+    },
+    "h2": {
+      "alignment": "left",
+      "line_spacing": 1.15,
+      "space_before_pt": 10,
+      "space_after_pt": 2,
+      "first_line_indent_chars": 0,
+      "keep_with_next": true
+    },
+    "h3": {
+      "alignment": "left",
+      "line_spacing": 1.15,
+      "space_before_pt": 6,
+      "space_after_pt": 2,
+      "first_line_indent_chars": 0,
+      "keep_with_next": true
+    },
+    "h4": {
+      "alignment": "left",
+      "line_spacing": 1.15,
+      "space_before_pt": 4,
+      "space_after_pt": 2,
+      "first_line_indent_chars": 0
+    },
+    "body": {
+      "alignment": "justify",
+      "line_spacing": 1.0,
+      "space_before_pt": 0,
+      "space_after_pt": 4,
+      "first_line_indent_chars": 2
+    },
+    "list": {
+      "alignment": "left",
+      "line_spacing": 1.0,
+      "space_before_pt": 0,
+      "space_after_pt": 2,
+      "first_line_indent_chars": 0
+    }
+  },
+  "image": {
+    "max_width_cm": 15,
+    "alignment": "center"
   },
   "paragraph": {
     "line_spacing": 1.0,

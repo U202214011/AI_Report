@@ -807,7 +807,7 @@ def _fallback_template() -> str:
         "{total_series_text}\n\n"
         "【维度结构（{dimension_analysis[dim_label]}）】\n"
         "{dim_table}\n\n"
-        "【图表占位符（请在对应段落插入）】\n"
+        "【图表占位符（请在最终输出中原样保留以下占位符，不得改写、删除）】\n"
         "{chart_placeholders_text}\n\n"
         "【数据局限】\n"
         "{limitations_note}\n\n"
@@ -820,10 +820,6 @@ def _fallback_template() -> str:
         "{constraints_yaml}"
     )
 
-
-def _slugify_key(text: str) -> str:
-    t = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fa5]+", "_", str(text)).strip("_")
-    return t.lower()[:64] if t else "chart"
 
 
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -850,16 +846,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
         periods = build_period_range(granularity, since, until)
 
-        chart_items = []
-        if plots:
-            for idx, plot in enumerate(plots):
-                if not isinstance(plot, dict):
-                    continue
-                title = plot.get("title") or f"chart_{idx + 1}"
-                key = _slugify_key(title)
-                chart_items.append({"key": key, "title": title, "placeholder": f"{{{{image:{key}}}}}"})
-
-        chart_placeholders_text = "（无图表）" if not chart_items else "\n".join([f"- {c['title']}：{c['placeholder']}" for c in chart_items])
 
         summary = {
             "reportType": report_type,
@@ -876,7 +862,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         prompt_data: Dict[str, Any] = {
             "summary": summary,
             "periods": periods,
-            "charts": {"count": len(chart_items), "items": chart_items},
             "statistical": {},
             "trend": {},
             "llmSummary": {}
@@ -1006,16 +991,18 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         template_payload = {
             "role_context": role_context,
             "task_definition": task_definition,
-            "data_summary": llm_data if isinstance(llm_data, dict) else {},
+            "data_summary": llm_data,
             "key_metrics": key_metrics,
-            "dimension_analysis": {"dim_label": dim_label},
+            "dimension_analysis": {
+                "dim_label": dim_label
+            },
             "dim_table": dim_table,
             "limitations_note": limitations_note,
             "format_requirements": format_requirements,
             "constraints_yaml": constraints_yaml,
             "series_granularity_label": gran_label,
-            "total_series_text": total_series_text,
-            "chart_placeholders_text": chart_placeholders_text
+            "total_series_text": total_series_text
+            # ✅ 删除 "chart_placeholders_text": chart_placeholders_text
         }
 
         templates = load_templates()

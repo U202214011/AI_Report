@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple, Optional, Set
 import os
 import re
 import json
+import base64
 from io import BytesIO
 from datetime import datetime
-import base64
 
 from docx import Document
 from docx.shared import Pt, Cm
@@ -26,7 +26,12 @@ _ITALIC_RE = re.compile(r'\*(.+?)\*')
 _UNDERLINE_RE = re.compile(r'__(.+?)__')
 
 # ---- image placeholder ----
-_IMAGE_PLACEHOLDER_RE = re.compile(r'^\s*\{\{image:([a-zA-Z0-9_\-]+)\}\}\s*$')
+_IMAGE_PLACEHOLDER_FULL_RE = re.compile(
+    r'^\s*\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}\s*$'
+)
+_IMAGE_PLACEHOLDER_INLINE_RE = re.compile(
+    r'\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}'
+)
 
 
 def _safe_filename(name: str) -> str:
@@ -104,7 +109,6 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any]):
     pf.line_spacing = line_spacing
     pf.space_before = _pt(before)
     pf.space_after = _pt(after)
-    # 中文两字符缩进粗略按 2*字体大小换算，这里按 2*11pt 兜底
     if indent_chars > 0:
         pf.first_line_indent = _pt(indent_chars * 11)
 
@@ -156,7 +160,6 @@ def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str,
     p_cfg = cfg.get("paragraph", {})
     font_cfg = fonts.get(style_key) or fonts.get("body") or {"family": "宋体", "size_pt": 11, "bold": False}
 
-    # Word 标题样式映射
     if style_key == "title":
         p = doc.add_paragraph(style="Title")
     elif style_key == "h1":
@@ -170,7 +173,6 @@ def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str,
 
     _apply_paragraph_style(p, p_cfg)
 
-    # 行内 markdown 处理
     for seg, is_bold, is_italic, is_underline in _split_inline_markdown(text):
         if seg == "":
             continue
@@ -251,7 +253,6 @@ def _add_image_block(doc: Document, image_bytes: bytes, cfg: Dict[str, Any]):
 def _decode_base64_image(b64: str) -> Optional[bytes]:
     if not b64:
         return None
-    # 允许 data:image/png;base64,xxx
     if "," in b64 and "base64" in b64.split(",")[0]:
         b64 = b64.split(",", 1)[1]
     try:
@@ -259,6 +260,173 @@ def _decode_base64_image(b64: str) -> Optional[bytes]:
     except Exception:
         return None
 
+
+# ---------------------------
+# 导出前：按章节语义注入占位符
+# ---------------------------
+
+def _collect_dimension_anchors(lines: List[str]) -> Dict[str, int]:
+    anchors: Dict[str, int] = {}
+    patterns = {
+        "genre": [r"\bgenre\b", r"流派"],
+        "artist": [r"\bartist\b", r"艺术家"],
+        "country": [r"\bcountry\b", r"国家"],
+        "city": [r"\bcity\b", r"城市"],
+        "customer": [r"\bcustomer\b", r"客户"],
+        "employee": [r"\bemployee\b", r"员工"],
+    }
+    for i, raw in enumerate(lines):
+        t = (raw or "").strip().lower()
+        if not t:
+            continue
+        for dim, pats in patterns.items():
+            if dim in anchors:
+                continue
+            for p in pats:
+                if re.search(p, t, flags=re.IGNORECASE):
+                    anchors[dim] = i
+                    break
+    return anchors
+
+
+def inject_placeholders_by_sections(
+    markdown_text: str,
+    images: Dict[str, str] | None
+) -> Tuple[str, Dict[str, Any]]:
+    """
+    返回: (注入后的markdown, debug信息)
+    """
+    debug: Dict[str, Any] = {
+        "anchors": {},
+        "inserted": [],
+        "existing_placeholders": [],
+        "unmatched_to_appendix": [],
+        "input_image_keys": [],
+        "final_image_keys": []
+    }
+
+    if not markdown_text:
+        return markdown_text or "", debug
+    if not images:
+        return markdown_text, debug
+
+    lines = markdown_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    keys = [k for k, v in (images or {}).items() if v]
+    debug["input_image_keys"] = list(keys)
+
+    existing: Set[str] = set()
+    for ln in lines:
+        found = re.findall(r"\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}", ln or "")
+        for x in found:
+            existing.add(x)
+    debug["existing_placeholders"] = sorted(existing)
+
+    keys = [k for k in keys if k not in existing]
+    debug["final_image_keys"] = list(keys)
+    if not keys:
+        return "\n".join(lines), debug
+
+    def key_dim(k: str) -> Optional[str]:
+        kk = (k or "").lower()
+        if "genre" in kk or "流派" in kk:
+            return "genre"
+        if "artist" in kk or "艺术家" in kk:
+            return "artist"
+        if "country" in kk or "国家" in kk:
+            return "country"
+        if "city" in kk or "城市" in kk:
+            return "city"
+        if "customer" in kk or "客户" in kk:
+            return "customer"
+        if "employee" in kk or "员工" in kk:
+            return "employee"
+        return None
+
+    def is_total(k: str) -> bool:
+        kk = (k or "").lower()
+        return ("总量" in kk) or ("total" in kk)
+
+    def sort_chart_keys(ks: List[str]) -> List[str]:
+        def score(x: str):
+            xx = x.lower()
+            if "趋势" in xx or "line" in xx:
+                return 1
+            if "柱状图" in xx or "bar" in xx:
+                return 2
+            if "饼图" in xx or "pie" in xx:
+                return 3
+            return 9
+        return sorted(ks, key=lambda s: (score(s), s))
+
+    overview_idx = 0
+    overview_title = "文档开头"
+    for i, ln in enumerate(lines):
+        tt = (ln or "").strip()
+        if any(x in tt for x in ["一、概览", "概览", "核心指标", "数据事实", "概述"]):
+            overview_idx = i
+            overview_title = tt[:50]
+            break
+
+    dim_anchors = _collect_dimension_anchors(lines)
+
+    debug["anchors"] = {
+        "overview": {"line": overview_idx + 1, "title": overview_title},
+        "dimensions": {
+            d: {"line": idx + 1, "title": (lines[idx].strip() if 0 <= idx < len(lines) else "")}
+            for d, idx in dim_anchors.items()
+        }
+    }
+
+    inserts: List[Tuple[int, str, str, str]] = []
+    placed: Set[str] = set()
+
+    for k in sort_chart_keys([x for x in keys if is_total(x)]):
+        inserts.append((overview_idx, k, f"{{{{image:{k}}}}}", "overview"))
+        placed.add(k)
+
+    for dim in ["genre", "artist", "country", "city", "customer", "employee"]:
+        anchor = dim_anchors.get(dim, -1)
+        dkeys = sort_chart_keys([x for x in keys if key_dim(x) == dim and x not in placed])
+        if anchor >= 0:
+            for k in dkeys:
+                inserts.append((anchor, k, f"{{{{image:{k}}}}}", f"dimension:{dim}"))
+                placed.add(k)
+
+    offset = 0
+    for idx, key, ph, section in sorted(inserts, key=lambda it: it[0]):
+        pos = idx + 1 + offset
+        lines.insert(pos, "")
+        lines.insert(pos + 1, ph)
+        lines.insert(pos + 2, "")
+        debug["inserted"].append({
+            "key": key,
+            "section": section,
+            "insert_after_line": idx + 1,
+            "actual_placeholder_line": pos + 2
+        })
+        offset += 3
+
+    remain = [k for k in keys if k not in placed]
+    if remain:
+        lines.append("")
+        lines.append("## 附录：图表")
+        appendix_header_line = len(lines)
+        for k in sort_chart_keys(remain):
+            lines.append(f"{{{{image:{k}}}}}")
+            debug["inserted"].append({
+                "key": k,
+                "section": "appendix",
+                "insert_after_line": appendix_header_line,
+                "actual_placeholder_line": len(lines)
+            })
+            debug["unmatched_to_appendix"].append(k)
+
+    return "\n".join(lines), debug
+
+
+# ---------------------------
+# markdown -> docx
+# ---------------------------
 
 def render_markdown_to_docx_bytes(
     markdown_text: str,
@@ -283,14 +451,40 @@ def render_markdown_to_docx_bytes(
             continue
 
         if typ == "p":
-            m = _IMAGE_PLACEHOLDER_RE.match(text)
-            if m and images:
-                key = m.group(1)
+            # 1) 整行占位符
+            full = _IMAGE_PLACEHOLDER_FULL_RE.match(text)
+            if full and images:
+                key = full.group(1)
                 img_b64 = images.get(key)
                 img_bytes = _decode_base64_image(img_b64) if img_b64 else None
                 if img_bytes:
                     _add_image_block(doc, img_bytes, template_cfg)
                     continue
+
+            # 2) 段内占位符
+            if images and _IMAGE_PLACEHOLDER_INLINE_RE.search(text or ""):
+                last = 0
+                for mm in _IMAGE_PLACEHOLDER_INLINE_RE.finditer(text):
+                    start, end = mm.span()
+                    key = mm.group(1)
+
+                    before = text[last:start].strip()
+                    if before:
+                        _add_text_paragraph(doc, before, "body", template_cfg)
+
+                    img_b64 = images.get(key)
+                    img_bytes = _decode_base64_image(img_b64) if img_b64 else None
+                    if img_bytes:
+                        _add_image_block(doc, img_bytes, template_cfg)
+                    else:
+                        _add_text_paragraph(doc, f"{{{{image:{key}}}}}", "body", template_cfg)
+
+                    last = end
+
+                tail = text[last:].strip()
+                if tail:
+                    _add_text_paragraph(doc, tail, "body", template_cfg)
+                continue
 
         if typ == "title":
             _add_text_paragraph(doc, text, "title", template_cfg)

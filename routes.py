@@ -26,7 +26,8 @@ from export_service import (
     list_export_templates,
     load_template_config,
     render_markdown_to_docx_bytes,
-    build_export_filename
+    build_export_filename,
+    inject_placeholders_by_sections
 )
 
 logger = logging.getLogger(__name__)
@@ -456,13 +457,8 @@ def register_routes(app):
         except Exception as e:
             return jsonify({"message": str(e)}), 500
 
-
     @app.route("/api/export/report", methods=["POST"])
     def export_report():
-        """
-        先做纯文本导出（markdown -> docx）
-        后续再加图像插入。
-        """
         payload = request.get_json() or {}
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
@@ -473,6 +469,22 @@ def register_routes(app):
             return jsonify({"message": "report_markdown 不能为空"}), 400
 
         try:
+            markdown_text, inject_debug = inject_placeholders_by_sections(markdown_text, plot_images)
+
+            # ✅ 导出时打印每个 key 去向
+            logger.info("[EXPORT][anchors] %s", inject_debug.get("anchors"))
+            for item in inject_debug.get("inserted", []):
+                logger.info(
+                    "[EXPORT][inserted] key=%s section=%s insert_after_line=%s actual_placeholder_line=%s",
+                    item.get("key"),
+                    item.get("section"),
+                    item.get("insert_after_line"),
+                    item.get("actual_placeholder_line")
+                )
+
+            if inject_debug.get("unmatched_to_appendix"):
+                logger.warning("[EXPORT][appendix_fallback] keys=%s", inject_debug.get("unmatched_to_appendix"))
+
             cfg = load_template_config(template_id)
             docx_bytes = render_markdown_to_docx_bytes(
                 markdown_text=markdown_text,
@@ -480,6 +492,7 @@ def register_routes(app):
                 report_title=report_title,
                 images=plot_images
             )
+
             filename = build_export_filename(prefix=report_title, ext="docx")
             return send_file(
                 BytesIO(docx_bytes),
@@ -488,4 +501,5 @@ def register_routes(app):
                 download_name=filename
             )
         except Exception as e:
+            logger.exception("[EXPORT] failed: %s", e)
             return jsonify({"message": str(e)}), 500

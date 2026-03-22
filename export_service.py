@@ -9,6 +9,7 @@ from datetime import datetime
 
 from docx import Document
 from docx.shared import Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 
 
@@ -31,6 +32,8 @@ _IMAGE_PLACEHOLDER_FULL_RE = re.compile(
 _IMAGE_PLACEHOLDER_INLINE_RE = re.compile(
     r'\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}'
 )
+
+_BULLET_CHAR = "\u2022"
 
 
 def _safe_filename(name: str) -> str:
@@ -91,11 +94,23 @@ def load_template_config(template_id: str | None) -> Dict[str, Any]:
 
 def _set_run_font(run, family: str, size_pt: float, bold: bool = False, italic: bool = False, underline: bool = False):
     run.font.name = family
-    run._element.rPr.rFonts.set(qn("w:eastAsia"), family)
+    # Ensure East Asia (CJK) font is also set so Chinese characters render correctly
+    rPr = run._element.get_or_add_rPr()
+    rFonts = rPr.get_or_add_rFonts()
+    rFonts.set(qn("w:eastAsia"), family)
+    rFonts.set(qn("w:hAnsi"), family)
     run.font.size = _pt(size_pt)
     run.bold = bool(bold)
     run.italic = bool(italic)
     run.underline = bool(underline)
+
+
+_ALIGNMENT_MAP = {
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+}
 
 
 def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any]):
@@ -110,6 +125,18 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any]):
     pf.space_after = _pt(after)
     if indent_chars > 0:
         pf.first_line_indent = _pt(indent_chars * 11)
+
+    alignment = p_cfg.get("alignment")
+    if alignment and alignment in _ALIGNMENT_MAP:
+        pf.alignment = _ALIGNMENT_MAP[alignment]
+
+    keep_with_next = p_cfg.get("keep_with_next")
+    if keep_with_next is not None:
+        pf.keep_with_next = bool(keep_with_next)
+
+    keep_together = p_cfg.get("keep_together")
+    if keep_together is not None:
+        pf.keep_together = bool(keep_together)
 
 
 def _split_inline_markdown(text: str) -> List[Tuple[str, bool, bool, bool]]:
@@ -154,19 +181,42 @@ def _split_inline_markdown(text: str) -> List[Tuple[str, bool, bool, bool]]:
     return parts
 
 
+def _get_para_cfg(style_key: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Return paragraph style config for *style_key*.
+    Looks in ``paragraph_styles.<style_key>`` first, then falls back to the
+    legacy ``paragraph`` block so older templates still work.
+    """
+    para_styles = cfg.get("paragraph_styles", {})
+    if style_key in para_styles:
+        return para_styles[style_key]
+    # legacy fallback
+    return cfg.get("paragraph", {})
+
+
 def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str, Any]):
     fonts = cfg.get("fonts", {})
-    p_cfg = cfg.get("paragraph", {})
+    p_cfg = _get_para_cfg(style_key, cfg)
     font_cfg = fonts.get(style_key) or fonts.get("body") or {"family": "宋体", "size_pt": 11, "bold": False}
 
-    if style_key == "title":
-        p = doc.add_paragraph(style="Title")
-    elif style_key == "h1":
-        p = doc.add_paragraph(style="Heading 1")
-    elif style_key == "h2":
-        p = doc.add_paragraph(style="Heading 2")
-    elif style_key == "h3":
-        p = doc.add_paragraph(style="Heading 3")
+    # Map style_key to the appropriate Word built-in style
+    _WORD_STYLE_MAP = {
+        "title": "Title",
+        "h1": "Heading 1",
+        "h2": "Heading 2",
+        "h3": "Heading 3",
+        "h4": "Heading 4",
+        "h5": "Heading 5",
+        "h6": "Heading 6",
+    }
+    word_style = _WORD_STYLE_MAP.get(style_key)
+    if word_style:
+        try:
+            p = doc.add_paragraph(style=word_style)
+        except KeyError:
+            # The built-in style may not exist in the blank document template;
+            # fall back gracefully to an unstyled paragraph.
+            p = doc.add_paragraph()
     else:
         p = doc.add_paragraph()
 
@@ -207,10 +257,7 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
         if hm:
             lv = len(hm.group(1))
             text = hm.group(2).strip()
-            if lv == 1:
-                blocks.append(("title", text, 1))
-            else:
-                blocks.append(("heading", text, lv))
+            blocks.append(("heading", text, lv))
             continue
 
         um = _UL_RE.match(raw)
@@ -653,17 +700,23 @@ def render_markdown_to_docx_bytes(
         if typ == "title":
             _add_text_paragraph(doc, text, "title", template_cfg)
         elif typ == "heading":
-            if lv <= 2:
+            if lv == 1:
                 key = "h1"
-            elif lv == 3:
+            elif lv == 2:
                 key = "h2"
-            else:
+            elif lv == 3:
                 key = "h3"
+            elif lv == 4:
+                key = "h4"
+            elif lv == 5:
+                key = "h5"
+            else:
+                key = "h6"
             _add_text_paragraph(doc, text, key, template_cfg)
         elif typ == "ul":
-            _add_text_paragraph(doc, f"• {text}", "body", template_cfg)
+            _add_text_paragraph(doc, f"{_BULLET_CHAR} {text}", "list", template_cfg)
         elif typ == "ol":
-            _add_text_paragraph(doc, text, "body", template_cfg)
+            _add_text_paragraph(doc, text, "list", template_cfg)
         else:
             _add_text_paragraph(doc, text, "body", template_cfg)
 

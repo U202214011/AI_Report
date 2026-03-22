@@ -39,52 +39,15 @@ REPORT_STYLE_MAP = {
 }
 
 STYLE_APPENDIX = {
-    "statistical.simple": (
-        "【报告风格要求（简明分析性）】\n"
-        "- 用3-5条要点先给管理层结论。\n"
-        "- 每条结论尽量包含关键数字（占比/排名/差异）。\n"
-        "- 语言简洁，避免过长推演。\n"
-    ),
-    "statistical.attribution": (
-        "【报告风格要求（归因解析型）】\n"
-        "- 强调结构占比、集中度、Top贡献来源。\n"
-        "- 解释主因与次因，并给出业务机制解释。\n"
-        "- 对无法验证的因果标注“推测”。\n"
-    ),
-    "statistical.forecast": (
-        "【报告风格要求（预测建议型）】\n"
-        "- 基于现有统计结构给出趋势外推与风险提示。\n"
-        "- 输出3-5条可执行建议（动作+对象+预期影响）。\n"
-        "- 明确建议优先级（高/中/低）。\n"
-    ),
-    "statistical.standard": (
-        "【报告风格要求（综合标准型）】\n"
-        "- 结构完整：概览/关键发现/原因分析/建议。\n"
-        "- 兼顾业务解读与数据证据。\n"
-    ),
-    "trend.simple": (
-        "【报告风格要求（简明分析性）】\n"
-        "- 先给趋势结论（上升/下降/波动）。\n"
-        "- 用3-5条要点概括关键拐点和异常期。\n"
-        "- 语言精炼，避免冗长。\n"
-    ),
-    "trend.attribution": (
-        "【报告风格要求（归因解析型）】\n"
-        "- 强调各维度对趋势变化的贡献。\n"
-        "- 指出驱动增长/下滑的关键类别与时间段。\n"
-        "- 对异常波动给出可能原因并标注置信度。\n"
-    ),
-    "trend.forecast": (
-        "【报告风格要求（预测建议型）】\n"
-        "- 对未来走势做方向性判断（短期/中期）。\n"
-        "- 给出风险预警与触发条件。\n"
-        "- 输出3-5条可执行建议（含优先级）。\n"
-    ),
-    "trend.standard": (
-        "【报告风格要求（综合标准型）】\n"
-        "- 结构完整：概览/关键发现/原因分析析/建议。\n"
-        "- 覆盖趋势、波动、维度差异与行动建议。\n"
-    )
+    # 降级为“补充提醒”，主控制放入模板主体
+    "statistical.simple": "【补充提醒】简明分析性：先结论，少铺陈，3-5条要点优先。",
+    "statistical.attribution": "【补充提醒】归因解析型：区分主因/次因，无法验证因果需标注“推测”。",
+    "statistical.forecast": "【补充提醒】预测建议型：给短中期方向、风险触发条件和优先级建议。",
+    "statistical.standard": "【补充提醒】综合标准型：保持概览/发现/原因/建议完整平衡。",
+    "trend.simple": "【补充提醒】简明分析性：先给趋势结论，再列关键拐点。",
+    "trend.attribution": "【补充提醒】归因解析型：强调维度对趋势变化的贡献。",
+    "trend.forecast": "【补充提醒】预测建议型：给趋势判断、风险触发与可执行动作。",
+    "trend.standard": "【补充提醒】综合标准型：覆盖趋势、波动、维度差异与建议。"
 }
 
 METRIC_MAP = {
@@ -390,17 +353,6 @@ def _parse_period_label(value: Any) -> Optional[datetime]:
     return None
 
 
-def _format_period_label(granularity: str, dt: datetime) -> str:
-    if granularity == "quarter":
-        q = (dt.month - 1) // 3 + 1
-        return f"{dt.year}-Q{q}"
-    if granularity == "month":
-        return dt.strftime("%Y-%m")
-    if granularity == "year":
-        return dt.strftime("%Y")
-    return dt.strftime("%Y-%m-%d")
-
-
 def _compute_volatility(values: List[float]) -> Dict[str, float]:
     if not values:
         return {"mean": 0.0, "std": 0.0, "coef_var": 0.0}
@@ -490,13 +442,7 @@ def _compute_dim_totals(rows: List[Dict[str, Any]], dim_key: str) -> Dict[str, A
     return {"totals": totals, "total_all": total_all}
 
 
-def _build_stat_dimension_summary(
-    dim: str,
-    metric: str,
-    since: Optional[str],
-    until: Optional[str],
-    top_n: int
-) -> Dict[str, Any]:
+def _build_stat_dimension_summary(dim: str, metric: str, since: Optional[str], until: Optional[str], top_n: int) -> Dict[str, Any]:
     payload = {
         "reportType": "statistical",
         "dimensions": [dim],
@@ -526,7 +472,6 @@ def _build_stat_dimension_summary(
 
     total_value = _sum_values(rows)
     top_categories = select_top_categories(rows, dim, top_n) or []
-
     top_rows = [r for r in rows if r.get(dim) in top_categories] if top_categories else rows[:]
     other_rows = [r for r in rows if r.get(dim) not in top_categories] if top_categories else []
 
@@ -538,7 +483,6 @@ def _build_stat_dimension_summary(
         ranking.append({"name": name, "value": val, "share_pct": share})
 
     ranking.sort(key=lambda x: x["value"], reverse=True)
-
     top_share = sum(i["share_pct"] for i in ranking)
 
     other_value = sum(_safe_float(r.get("value")) for r in other_rows)
@@ -563,6 +507,7 @@ def _build_stat_dimension_summary(
         "minName": (min_item or {}).get("name")
     }
 
+
 def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: str) -> str:
     if not dimension_summaries:
         return "（无维度明细数据）"
@@ -573,13 +518,7 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: st
             continue
 
         label = dim_summary.get("dimensionLabel") or "维度"
-
-        ranking = dim_summary.get("ranking")
-        if not ranking:
-            ranking = dim_summary.get("topN")
-        if not isinstance(ranking, list):
-            ranking = []
-
+        ranking = dim_summary.get("ranking") or dim_summary.get("topN") or []
         ranking = [r for r in ranking if isinstance(r, dict) and (r.get("name") is not None)]
 
         if not ranking:
@@ -594,21 +533,12 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: st
             lines.append(f"{idx}. {name}：{_format_metric_value(metric, value)}（占比{pct:.2f}%）")
 
         others = dim_summary.get("others") if isinstance(dim_summary.get("others"), dict) else {}
-        others_name = others.get("name", "其他")
         others_value = _safe_float(others.get("value"))
         others_pct = _safe_float(others.get("share_pct"))
-
         lines.append(f"其他：{_format_metric_value(metric, others_value)}（综合占比{others_pct:.2f}%）")
-
-        max_name = dim_summary.get("maxName")
-        min_name = dim_summary.get("minName")
-        max_val = _safe_float(dim_summary.get("maxValue"))
-        min_val = _safe_float(dim_summary.get("minValue"))
 
         lines.append(f"TopN合计占比：{_safe_float(dim_summary.get('topSharePct')):.2f}%")
         lines.append(f"其他合计占比：{_safe_float(dim_summary.get('othersSharePct')):.2f}%")
-        lines.append(f"最大值：{max_name}（{_format_metric_value(metric, max_val)}）")
-        lines.append(f"最小值：{min_name}（{_format_metric_value(metric, min_val)}）")
         lines.append("口径说明：以上“其他”为除TopN外所有类别的合并项，禁止重新拆分或复算。")
         blocks.append("\n".join(lines))
 
@@ -625,6 +555,7 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metr
         if not categories:
             blocks.append(f"{label}：\n（无维度明细数据）")
             continue
+
         header = (
             f"{label}（Top{dim_summary.get('topN', 'N')}）占比{dim_summary.get('topSharePct', 0):.2f}%，"
             f"Top3 {dim_summary.get('top3SharePct', 0):.2f}%，Top5 {dim_summary.get('top5SharePct', 0):.2f}%"
@@ -646,7 +577,6 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metr
             contrib_abs = _safe_float(cat.get("growthContributionPctAbs"))
 
             lines.append(f"{idx}. {name}：占比{share:.2f}%；趋势{trend}；波动标准差{std:.2f}，变异系数{coef:.2f}")
-
             sign = "+" if growth_val > 0 else ""
             lines.append(f"   - 首末期变化：{sign}{_format_metric_value(metric, growth_val)}")
             lines.append(f"   - 净增长贡献率（带符号）：{contrib_signed:+.2f}%")
@@ -753,12 +683,10 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
             min_growth_cat = _min_growth_period(data)
             peak_valley_cat = _extract_peak_valley(data)
             share_pct = (totals_map.get(label, 0.0) / total_all * 100) if total_all else 0.0
-            net_growth_total = sum(cat_growths)  # 可能为正/负/0
+            net_growth_total = sum(cat_growths)
 
             cat_growth = cat_growths[idx] if idx < len(cat_growths) else 0.0
-            # 1) 带符号净贡献率
             growth_contrib_signed = (cat_growth / net_growth_total * 100) if net_growth_total else 0.0
-            # 2) 绝对贡献率（可选保留，衡量“影响大小”）
             growth_contrib_abs = (abs(cat_growth) / total_abs_growth * 100) if total_abs_growth else 0.0
 
             categories.append({
@@ -770,9 +698,9 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
                 "minGrowthPeriod": min_growth_cat,
                 "peakValley": peak_valley_cat,
                 "sharePct": share_pct,
-                "growthValue": cat_growth,  # 新增：首末期变化值（带符号）
-                "growthContributionPctSigned": growth_contrib_signed,  # 新增：带符号净贡献率
-                "growthContributionPctAbs": growth_contrib_abs  # 可选：绝对贡献率
+                "growthValue": cat_growth,
+                "growthContributionPctSigned": growth_contrib_signed,
+                "growthContributionPctAbs": growth_contrib_abs
             })
 
         dim_summaries.append({
@@ -806,17 +734,6 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
         "natural_fragments": {"overview_sentence": overview_sentence}
     }
 
-def _metric_unit(metric: str) -> str:
-    if metric == "sales_amount":
-        return "元"
-    if metric == "order_count":
-        return "笔"
-    if metric == "avg_order_value":
-        return "元/笔"
-    return "数值"
-
-def _metric_name_cn(metric: str) -> str:
-    return METRIC_LABELS_CN.get(metric, metric)
 
 def _build_metric_semantics(metric: str) -> Dict[str, str]:
     metric_cn = METRIC_LABELS_CN.get(metric, metric)
@@ -847,6 +764,7 @@ def _build_metric_semantics(metric: str) -> Dict[str, str]:
         "no_revalidation_note": "口径已在上文固定，禁止对占比与增长率定义进行二次验证或改写。"
     }
 
+
 def _format_metric_value(metric: str, value: float) -> str:
     if metric == "order_count":
         return f"{value:,.0f} 笔"
@@ -861,47 +779,20 @@ def _build_total_series_text(series: List[Dict[str, Any]], metric: str) -> str:
     return "\n".join([f"{item.get('x')}: {_format_metric_value(metric, _safe_float(item.get('y')))}" for item in series])
 
 
-def _fallback_template() -> str:
-    return (
-        "【角色与场景】\n"
-        "你是一位{role_context[analyst_level]}，负责{role_context[domain]}的{role_context[decision_type]}分析。\n\n"
-        "【数据事实】\n"
-        "{data_summary[natural_fragments][overview_sentence]}\n\n"
-        "【核心数据指标（按{series_granularity_label}）】\n"
-        "{total_series_text}\n\n"
-        "【维度结构（{dimension_analysis[dim_label]}）】\n"
-        "{dim_table}\n\n"
-        "【数据局限】\n"
-        "{limitations_note}\n\n"
-        "【输出要求】\n"
-        "格式：{format_requirements[sections]}\n"
-        "风格：{format_requirements[tone]}\n"
-        "数字格式：{format_requirements[number_format]}\n"
-        "字数：{format_requirements[length_limit]}\n\n"
-        "【强制约束】\n"
-        "{constraints_yaml}\n\n"
-        "【Markdown结构硬约束】\n"
-        "{markdown_constraints}"
-    )
-
 def _build_selected_dimensions_block(dims: List[str]) -> Dict[str, Any]:
-    """
-    从 normalized.dimensions 生成本次维度约束数据（排除 total）
-    """
-    selected_keys = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
-    selected_titles = [DIMENSION_LABELS_CN[k] for k in selected_keys]
+    selected_keys: List[str] = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
+    selected_titles: List[str] = [DIMENSION_LABELS_CN[k] for k in selected_keys]
+    selected_h2_lines = "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else "（本次未选择维度）"
+    selected_titles_joined = "、".join(selected_titles) if selected_titles else "无"
     return {
         "selected_keys": selected_keys,
         "selected_titles": selected_titles,
-        "selected_titles_joined": "、".join(selected_titles) if selected_titles else "无",
-        "selected_h2_lines": "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else ""
+        "selected_h2_lines": selected_h2_lines,
+        "selected_titles_joined": selected_titles_joined
     }
 
 
 def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
-    """
-    输出给模板变量 {markdown_constraints} 的硬约束文本
-    """
     base = (
         "1) 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
         "2) 一级标题必须严格且按以下顺序输出，名称必须完全一致：\n"
@@ -911,7 +802,6 @@ def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
         "# 建议\n"
         "3) 除“维度关键发现”外，其他一级标题下不要创建维度型二级标题。\n"
     )
-
     if selected_dim_titles:
         dim_lines = "\n".join([f"## {t}" for t in selected_dim_titles])
         dim_part = (
@@ -925,68 +815,92 @@ def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
             "4) 本次未选择维度。在“维度关键发现”下不要输出二级标题，可写“本次未选择维度分析”。\n"
             "5) 不得新增任何维度型二级标题。\n"
         )
-
     tail = "7) 不要输出任何图片占位符（如 {{image:...}}）,图片由系统后处理插入。"
     return base + dim_part + tail
 
 
-def _build_selected_dimensions_block(dims: List[str]) -> Dict[str, Any]:
-    """
-    从 normalized.dimensions 构建本次可用维度（排除 total）
-    返回:
-    {
-      "selected_keys": [...],
-      "selected_titles": [...],
-      "selected_h2_lines": "## 艺术家\n## 国家",
-      "selected_titles_joined": "艺术家、国家"
-    }
-    """
-    selected_keys: List[str] = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
-    selected_titles: List[str] = [DIMENSION_LABELS_CN[k] for k in selected_keys]
-    selected_h2_lines = "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else "（本次未选择维度）"
-    selected_titles_joined = "、".join(selected_titles) if selected_titles else "无"
+def _build_report_type_contract(report_type: str) -> Dict[str, str]:
+    if report_type == "statistical":
+        return {
+            "report_type_name": "统计型",
+            "analysis_goal": "识别总体规模、结构分布、TopN贡献和集中度特征。",
+            "focus_points": "总量、占比、TopN、其他、集中度、维度对比",
+            "overview_rule": "先概述总体规模，再说明结构分布与头部集中情况。",
+            "reasoning_rule": "重点解释结构差异、头部贡献与潜在业务含义。",
+            "advice_rule": "建议围绕资源配置、重点维度经营、长尾优化展开。"
+        }
     return {
-        "selected_keys": selected_keys,
-        "selected_titles": selected_titles,
-        "selected_h2_lines": selected_h2_lines,
-        "selected_titles_joined": selected_titles_joined
+        "report_type_name": "趋势型",
+        "analysis_goal": "识别整体趋势方向、波动特征、异常节点及维度驱动因素。",
+        "focus_points": "趋势、拐点、峰谷、波动、增长贡献、异常期",
+        "overview_rule": "先判断整体走势，再说明关键拐点与阶段变化。",
+        "reasoning_rule": "重点解释维度驱动、波动来源及异常期可能原因。",
+        "advice_rule": "建议围绕趋势延续、风险预警、波动治理展开。"
     }
 
 
-def _build_markdown_structure_constraints(selected_titles: List[str]) -> str:
-    """
-    追加到 prompt 尾部的“硬约束”文本，强制 LLM 输出稳定 Markdown 结构
-    """
-    if selected_titles:
-        h2_lines = "\n".join([f"## {t}" for t in selected_titles])
-        selected_text = "、".join(selected_titles)
-        dim_rule = (
-            "4. 在“维度关键发现章节下，只能使用以下二级标题，且标题名称必须完全一致：\n"
-            f"{h2_lines}\n"
-            "5. 不要输出未在上述列表中的任何维度二级标题。\n"
-            "6. 若某个允许维度数据不足，可在该标题下写“数据不足”并简述原因，但不要删标题或改标题。\n"
-        )
-    else:
-        selected_text = "无"
-        dim_rule = (
-            "4. 本次未选择任何维度。在“维度关键发现”章节下不要输出任何二级标题，可写“本次未选择维度分析”。\n"
-            "5. 不要新增任何维度型二级标题。\n"
-        )
+def _build_report_style_contract(report_style: Optional[str]) -> Dict[str, str]:
+    style = (report_style or "standard").strip().lower()
+    contracts = {
+        "simple": {
+            "style_name": "简明分析性",
+            "writing_goal": "先结论后展开，用最少文字表达最关键发现。",
+            "focus_rule": "优先输出3-5条关键结论，每条尽量附数字证据。",
+            "reasoning_rule": "只保留必要解释，避免冗长推演。",
+            "advice_rule": "建议简洁明确，不超过3-5条。",
+            "language_rule": "语言精炼，管理层快速可读。"
+        },
+        "attribution": {
+            "style_name": "归因解析型",
+            "writing_goal": "不仅描述现象，还要解释变化由谁驱动、为什么发生。",
+            "focus_rule": "必须区分主因、次因，并说明结构占比与关键贡献来源。",
+            "reasoning_rule": "优先解释业务机制；无法验证因果必须标注“推测”。",
+            "advice_rule": "建议需与原因分析一一对应。",
+            "language_rule": "强调因果链路和证据对应。"
+        },
+        "forecast": {
+            "style_name": "预测建议型",
+            "writing_goal": "在现有数据基础上做方向判断，并提出可执行动作。",
+            "focus_rule": "必须包含短期/中期走势、风险点与触发条件。",
+            "reasoning_rule": "预测必须基于已给数据，不得写成确定事实。",
+            "advice_rule": "建议要含优先级、动作对象、预期影响。",
+            "language_rule": "偏经营决策表达，强调行动性。"
+        },
+        "standard": {
+            "style_name": "综合标准型",
+            "writing_goal": "兼顾概览、发现、归因和建议，保持完整平衡。",
+            "focus_rule": "覆盖事实、分析和建议，不偏废。",
+            "reasoning_rule": "结论与证据必须对应。",
+            "advice_rule": "建议与关键发现保持一致。",
+            "language_rule": "专业、完整、稳定。"
+        }
+    }
+    return contracts.get(style, contracts["standard"])
 
+
+def _fallback_template() -> str:
     return (
-        "【Markdown结构强约束（必须严格遵守）】\n"
-        "1. 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
-        "2. 一级标题必须且仅能按以下顺序输出：\n"
-        "# 概览\n"
-        "# 维度关键发现\n"
-        "# 原因分析\n"
-        "# 建议\n"
-        "3. 标题名称必须完全一致，不允许使用“概述/关键发现总结/对策建议”等近义词替换。\n"
-        f"{dim_rule}"
-        "7. 除“维度关键发现”外，其他一级标题下不要创建维度型二级标题。\n"
-        "8. 不要输出任何图片占位符（如 {{image:...}}），图片将由系统后处理插入。\n"
-        f"9. 本次允许维度：{selected_text}。\n"
+        "【角色与场景】\n"
+        "你是一位{role_context[analyst_level]}，负责{role_context[domain]}的{role_context[decision_type]}分析。\n\n"
+        "【类型与风格】\n"
+        "- 报告类型：{report_type_contract[report_type_name]}\n"
+        "- 报告风格：{report_style_contract[style_name]}\n"
+        "- 风格目标：{report_style_contract[writing_goal]}\n\n"
+        "【数据事实】\n"
+        "{data_summary[natural_fragments][overview_sentence]}\n\n"
+        "【核心数据指标（按{series_granularity_label}）】\n"
+        "{total_series_text}\n\n"
+        "【维度结构（{dimension_analysis[dim_label]}）】\n"
+        "{dim_table}\n\n"
+        "【输出要求】\n"
+        "格式：{format_requirements[sections]}\n"
+        "风格：{format_requirements[tone]}\n"
+        "数字格式：{format_requirements[number_format]}\n"
+        "字数：{format_requirements[length_limit]}\n\n"
+        "【Markdown结构硬约束】\n"
+        "{markdown_constraints}"
     )
+
 
 def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     try:
@@ -998,13 +912,9 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         until = normalized.get("until")
         dims = normalized.get("dimensions") or ["total"]
         dims = [d for d in dims if d in DIMENSION_LABELS_CN] or ["total"]
-        # ✅ 新增：动态维度结构约束数据
+
         selected_dims_block = _build_selected_dimensions_block(dims)
-        selected_dim_titles = selected_dims_block["selected_titles"]
-        markdown_constraints = _build_markdown_constraints_text(selected_dim_titles)
-        # ✅ 新增：本次选中维度（排除 total）
-        selected_dims_info = _build_selected_dimensions_block(dims)
-        selected_dimension_titles = selected_dims_info["selected_titles"]
+        markdown_constraints = _build_markdown_constraints_text(selected_dims_block["selected_titles"])
 
         style_raw = normalized.get("reportStyle")
         report_style = None
@@ -1018,7 +928,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         metric_label = METRIC_LABELS_CN.get(metric, metric)
         gran_label = GRANULARITY_LABELS_CN.get(granularity, granularity)
         periods = build_period_range(granularity, since, until)
-
         metric_semantics = _build_metric_semantics(metric)
 
         summary = {
@@ -1046,25 +955,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             rows = run_query(sql, params)
             total_series = build_total_series(rows, granularity, periods=periods if periods else None)
             total_metric = _compute_total_metric(metric, granularity, since, until) if metric == "avg_order_value" else sum(_safe_float(item.get("y")) for item in total_series)
-
             dimension_summaries = [_build_stat_dimension_summary(dim, metric, since, until, top_n) for dim in dims if dim != "total"]
-
-            if not dimension_summaries and any(d != "total" for d in dims):
-                fallback_blocks = []
-                for d in [x for x in dims if x != "total"]:
-                    fallback_blocks.append({
-                        "dimension": d,
-                        "dimensionLabel": DIMENSION_LABELS_CN.get(d, d),
-                        "total": 0.0,
-                        "topCategories": [],
-                        "ranking": [],
-                        "topSharePct": 0.0,
-                        "maxValue": 0.0,
-                        "maxName": None,
-                        "minValue": 0.0,
-                        "minName": None
-                    })
-                dimension_summaries = fallback_blocks
 
             prompt_data["statistical"] = {"total": total_metric, "dimensions": dimension_summaries}
             prompt_data["llmSummary"]["statistical"] = _build_stat_llm_summary(
@@ -1103,10 +994,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         role_context = {"analyst_level": "资深数据分析师", "domain": "销售数据", "decision_type": "经营决策", "report_audience": "管理层"}
 
         basic_stats = llm_data.get("basicStats", {}) if isinstance(llm_data, dict) else {}
-        max_period = llm_data.get("maxPeriod") if isinstance(llm_data, dict) else None
-        min_period = llm_data.get("minPeriod") if isinstance(llm_data, dict) else None
-        median_period = llm_data.get("medianPeriod") if isinstance(llm_data, dict) else None
-
         total_sales = _compute_total_metric("sales_amount", granularity, since, until)
         total_orders = _compute_total_metric("order_count", granularity, since, until)
         avg_order = total_sales / total_orders if total_orders else 0.0
@@ -1124,11 +1011,11 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             "avg_order_value_text": _format_metric_value("avg_order_value", avg_order),
             "period_mean_text": _format_metric_value(metric, basic_stats.get("mean", 0.0)),
             "period_max_text": _format_metric_value(metric, basic_stats.get("max", 0.0)),
-            "period_max_period": max_period or "N/A",
+            "period_max_period": llm_data.get("maxPeriod") or "N/A",
             "period_min_text": _format_metric_value(metric, basic_stats.get("min", 0.0)),
-            "period_min_period": min_period or "N/A",
+            "period_min_period": llm_data.get("minPeriod") or "N/A",
             "period_median_text": _format_metric_value(metric, basic_stats.get("median", 0.0)),
-            "period_median_period": median_period or "N/A"
+            "period_median_period": llm_data.get("medianPeriod") or "N/A"
         }
 
         if report_type == "statistical":
@@ -1137,8 +1024,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 "focus": f"{metric_label}结构与Top{top_n}贡献",
                 "depth": "结构、占比、集中度与对比"
             }
-            dim_summaries = llm_data.get("dimensionsSummary") if isinstance(llm_data, dict) else []
-            dim_summaries = dim_summaries or []
+            dim_summaries = llm_data.get("dimensionsSummary") or []
             dim_label = "、".join([d.get("dimensionLabel") for d in dim_summaries if isinstance(d, dict) and d.get("dimensionLabel")]) or "维度"
             dim_table = _build_dim_table_texts(dim_summaries, metric)
         else:
@@ -1147,24 +1033,27 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 "focus": f"{metric_label}趋势变化与波动诊断",
                 "depth": "趋势方向、波动、异常与结构差异"
             }
-            dim_summaries = llm_data.get("dimensionsSummary") if isinstance(llm_data, dict) else []
-            dim_summaries = dim_summaries or []
+            dim_summaries = llm_data.get("dimensionsSummary") or []
             dim_label = "、".join([d.get("dimensionLabel") for d in dim_summaries if isinstance(d, dict) and d.get("dimensionLabel")]) or "维度"
             dim_table = _build_trend_dim_table_texts(dim_summaries, metric)
 
+        report_type_contract = _build_report_type_contract(report_type)
+        report_style_contract = _build_report_style_contract(report_style)
+
         format_requirements = {
             "sections": "概览/维度关键发现/原因分析/建议",
-            "tone": "专业、详细、可执行",
+            "tone": f"{report_type_contract['report_type_name']} + {report_style_contract['style_name']}；{report_style_contract['writing_goal']}",
             "number_format": "金额保留2位小数，比例保留2位小数",
             "length_limit": "600-1000字"
         }
-        constraints_yaml = "\n".join(["- 仅使用给定数据", "- 不得编造结论", "- 如数据不足需说明"])
-        limitations_note = "若部分维度/时间粒度无数据，请在报告中说明限制。"
+
         total_series_text = _build_total_series_text((llm_data.get("series") if isinstance(llm_data, dict) else []) or [], metric)
 
         template_payload = {
             "role_context": role_context,
             "task_definition": task_definition,
+            "report_type_contract": report_type_contract,
+            "report_style_contract": report_style_contract,
             "data_summary": llm_data,
             "key_metrics": key_metrics,
             "metric_semantics": metric_semantics,
@@ -1174,13 +1063,9 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 "selected_h2_lines": selected_dims_block.get("selected_h2_lines", "")
             },
             "dim_table": dim_table,
-            "limitations_note": limitations_note,
             "format_requirements": format_requirements,
-            "constraints_yaml": constraints_yaml,
             "series_granularity_label": gran_label,
             "total_series_text": total_series_text,
-
-            # ✅ 新增：给 prompt_templates.json 里的 {markdown_constraints} 使用
             "markdown_constraints": markdown_constraints
         }
 
@@ -1198,7 +1083,6 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(template_text)
 
         prompt_text = render_template(template_text, template_payload)
-
         unresolved_count = _count_unresolved_placeholders(prompt_text)
         _TEMPLATE_DEBUG_STATE["unresolved_placeholder_count"] = unresolved_count
 
@@ -1215,15 +1099,11 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 _TEMPLATE_DEBUG_STATE["unresolved_placeholder_count"] = fallback_unresolved
 
         style_appendix = STYLE_APPENDIX.get(style_key, "")
-        if not style_appendix and report_style:
-            style_appendix = STYLE_APPENDIX.get(f"{report_type}.{str(report_style).strip().lower()}", "")
         _TEMPLATE_DEBUG_STATE["style_appendix_len"] = len(style_appendix or "")
-
         if style_appendix:
             prompt_text = prompt_text.rstrip() + "\n\n" + style_appendix.strip() + "\n"
 
         _TEMPLATE_DEBUG_STATE["rendered_prompt_len"] = len(prompt_text or "")
-
         return {
             "prompt": prompt_text,
             "promptData": prompt_data,

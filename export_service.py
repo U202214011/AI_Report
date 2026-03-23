@@ -18,15 +18,18 @@ from schema_config import get_dimension_alias_map, get_dimension_title_map
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "export_templates")
 
+# ---- markdown block parse ----
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)$')
 _UL_RE = re.compile(r'^\s*[-*]\s+(.*)$')
 _OL_RE = re.compile(r'^\s*(\d+)\.\s+(.*)$')
 _CODE_FENCE_RE = re.compile(r'^\s*```([a-zA-Z0-9_\-]*)\s*$')
 
+# ---- inline markdown ----
 _BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
 _ITALIC_RE = re.compile(r'\*(.+?)\*')
 _UNDERLINE_RE = re.compile(r'__(.+?)__')
 
+# ---- image placeholder ----
 _IMAGE_PLACEHOLDER_FULL_RE = re.compile(
     r'^\s*\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}\s*$'
 )
@@ -51,7 +54,14 @@ def _pt(v: float) -> Pt:
     return Pt(float(v))
 
 
+# ---------------------------
+# 基础：Word field / tab / paragraph helpers
+# ---------------------------
+
 def _add_field_run(paragraph, field_name: str):
+    """
+    在段落中插入 Word 域（如 PAGE / NUMPAGES）
+    """
     run = paragraph.add_run()
     fld_char_begin = OxmlElement('w:fldChar')
     fld_char_begin.set(qn('w:fldCharType'), 'begin')
@@ -74,6 +84,12 @@ def _add_field_run(paragraph, field_name: str):
 
 
 def _add_tab_stops(pf, tab_stops: List[Dict[str, Any]]):
+    """
+    tab_stops:
+    [
+      {"pos_cm": 8.0, "align":"left|center|right|decimal", "leader":"none|dot|hyphen|underscore"}
+    ]
+    """
     align_map = {
         "left": WD_TAB_ALIGNMENT.LEFT,
         "center": WD_TAB_ALIGNMENT.CENTER,
@@ -264,6 +280,10 @@ def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str,
 
 
 def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
+    """
+    返回 [(type, text, level)]
+    type: heading|ul|ol|p|blank|code|table_row
+    """
     lines = (md_text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     blocks: List[Tuple[str, str, int]] = []
 
@@ -485,11 +505,41 @@ def _add_markdown_table(doc: Document, rows: List[List[str]], cfg: Dict[str, Any
                 _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
 
 
+# ---------------------------
+# 按章节注入图片占位符
+# ---------------------------
 _HEADING_LINE_RE = re.compile(r'^(#{1,6})\s+(.*?)\s*$')
 
 
 def _normalize_text_compact(text: str) -> str:
-    return re.sub(r"\s+", "", (text or "").strip())
+    text = (text or "").strip()
+    text = re.sub(r"\s+", "", text)
+    return text
+
+
+def _strip_heading_prefix(text: str) -> str:
+    """
+    去掉常见标题编号前缀：
+    一、概览 -> 概览
+    （一）国家 -> 国家
+    1. 国家 -> 国家
+    1、国家 -> 国家
+    """
+    t = _normalize_text_compact(text)
+    patterns = [
+        r'^[一二三四五六七八九十]+、',
+        r'^第[一二三四五六七八九十]+部分',
+        r'^第[一二三四五六七八九十]+章',
+        r'^\([一二��四五六七八九十]+\)',
+        r'^（[一二三四五六七八九十]+）',
+        r'^\d+\.',
+        r'^\d+、',
+        r'^\(\d+\)',
+        r'^（\d+）',
+    ]
+    for p in patterns:
+        t = re.sub(p, '', t)
+    return t.strip()
 
 
 def _parse_headings(lines: List[str]) -> List[Dict[str, Any]]:
@@ -500,11 +550,14 @@ def _parse_headings(lines: List[str]) -> List[Dict[str, Any]]:
             continue
         level = len(m.group(1))
         text = m.group(2).strip()
+        norm = _normalize_text_compact(text)
+        stripped = _strip_heading_prefix(text)
         out.append({
             "line_index": i,
             "level": level,
             "text": text,
-            "norm": _normalize_text_compact(text)
+            "norm": norm,
+            "stripped_norm": stripped
         })
     return out
 
@@ -554,19 +607,41 @@ def _build_dimension_maps(
 
 
 def _find_main_sections(headings: List[Dict[str, Any]], total_lines: int) -> Dict[str, Dict[str, Any]]:
+    def _is_overview_title(norm: str) -> bool:
+        return "概览" in norm
+
+    def _is_findings_title(norm: str) -> bool:
+        return ("维度" in norm) or ("关键发现" in norm)
+
+    def _is_cause_title(norm: str) -> bool:
+        return "原因" in norm
+
+    def _is_advice_title(norm: str) -> bool:
+        return "建议" in norm
+
     seq: List[Tuple[str, int, str]] = []
+    used = set()
+
     for h in headings:
         if h["level"] != 1:
             continue
-        n = h["norm"]
-        if n == "概览":
+
+        n = h.get("stripped_norm") or h["norm"]
+
+        if _is_overview_title(n) and "overview" not in used:
             seq.append(("overview", h["line_index"], h["text"]))
-        elif n == "维度关键发现":
+            used.add("overview")
+        elif _is_findings_title(n) and "findings" not in used:
             seq.append(("findings", h["line_index"], h["text"]))
-        elif n == "原因分析":
+            used.add("findings")
+        elif _is_cause_title(n) and "cause" not in used:
             seq.append(("cause", h["line_index"], h["text"]))
-        elif n == "建议":
+            used.add("cause")
+        elif _is_advice_title(n) and "advice" not in used:
             seq.append(("advice", h["line_index"], h["text"]))
+            used.add("advice")
+
+    seq = sorted(seq, key=lambda x: x[1])
 
     result: Dict[str, Dict[str, Any]] = {}
     for i, (name, start, title) in enumerate(seq):
@@ -583,7 +658,7 @@ def _find_dimension_sections_in_findings(
     findings_end: int,
     dim_title_map: Dict[str, str]
 ) -> Dict[str, Dict[str, Any]]:
-    title_to_dim = {_normalize_text_compact(v): k for k, v in dim_title_map.items()}
+    alias_map = get_dimension_alias_map(include_total=False)
     found: List[Tuple[str, int, str]] = []
 
     for h in headings:
@@ -591,10 +666,22 @@ def _find_dimension_sections_in_findings(
             continue
         if not (findings_start <= h["line_index"] <= findings_end):
             continue
-        dim = title_to_dim.get(h["norm"])
-        if not dim:
-            continue
-        found.append((dim, h["line_index"], h["text"]))
+
+        norm_title = h.get("stripped_norm") or h["norm"]
+        matched_dim = None
+
+        for dim, aliases in alias_map.items():
+            candidates = set(aliases + [dim_title_map.get(dim, dim), dim])
+            for alias in candidates:
+                alias_norm = _normalize_text_compact(str(alias))
+                if alias_norm and alias_norm in norm_title:
+                    matched_dim = dim
+                    break
+            if matched_dim:
+                break
+
+        if matched_dim:
+            found.append((matched_dim, h["line_index"], h["text"]))
 
     result: Dict[str, Dict[str, Any]] = {}
     for i, (dim, start, title) in enumerate(found):
@@ -614,11 +701,6 @@ def _chart_rank_for_insert(key: str) -> int:
     if ("pie" in k) or ("饼" in k):
         return 3
     return 9
-
-
-def _is_overview_chart_key(key: str) -> bool:
-    k = (key or "").lower()
-    return any(x in k for x in ["total", "总量", "overview", "summary", "概览", "总体"])
 
 
 def _infer_dim_from_key(key: str, dim_alias_map: Dict[str, List[str]]) -> Optional[str]:
@@ -766,8 +848,7 @@ def inject_placeholders_by_sections(
             inserts.append((anchor, k, f"{{{{image:{k}}}}}", "overview"))
             placed.add(k)
     else:
-        for k in overview_keys:
-            remain_keys.append(k)
+        remain_keys.extend(overview_keys)
 
     for dim, ks in dim_groups.items():
         sec = dim_sections.get(dim)
@@ -821,6 +902,7 @@ def inject_placeholders_by_sections(
     return "\n".join(lines), debug
 
 
+# 新增：用户模板目录（可选）
 USER_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "user")
 os.makedirs(USER_TEMPLATE_DIR, exist_ok=True)
 
@@ -900,6 +982,10 @@ def delete_user_template_config(template_id: str) -> None:
         raise FileNotFoundError(f"用户模板 '{safe_id}' 不存在")
     os.remove(path)
 
+
+# ---------------------------
+# markdown -> docx（增强版）
+# ---------------------------
 
 def render_markdown_to_docx_bytes(
     markdown_text: str,

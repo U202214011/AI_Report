@@ -759,8 +759,17 @@ def register_routes(app):
         plot_images_meta = payload.get("plot_images_meta") or {}
 
         plots_payload = payload.get("plots") or []
-        if (not plot_images) and isinstance(plots_payload, list) and plots_payload:
-            plot_images, plot_images_meta = _build_plot_images_and_meta(plots_payload)
+        built_plot_images = {}
+        built_plot_images_meta = {}
+
+        if isinstance(plots_payload, list) and plots_payload:
+            built_plot_images, built_plot_images_meta = _build_plot_images_and_meta(plots_payload)
+
+        if not plot_images and built_plot_images:
+            plot_images = built_plot_images
+
+        if not plot_images_meta and built_plot_images_meta:
+            plot_images_meta = built_plot_images_meta
 
         selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
         selected_dimensions = build_selected_dimensions(selected_dim_keys)

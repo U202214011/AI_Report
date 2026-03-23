@@ -16,6 +16,11 @@ from report_service import (
     build_series_by_dimension,
     select_top_categories
 )
+from schema_config import METRICS, DIMENSIONS, ROLE_CONTEXT
+
+# ---------- 从 schema_config 动态生成映射字典 ----------
+METRIC_LABELS_CN    = {k: v["label_cn"] for k, v in METRICS.items()}
+DIMENSION_LABELS_CN = {k: v["label_cn"] for k, v in DIMENSIONS.items()}
 
 REPORT_TYPE_MAP = {
     "stat": "statistical",
@@ -39,9 +44,9 @@ REPORT_STYLE_MAP = {
 }
 
 STYLE_APPENDIX = {
-    # 降级为“补充提醒”，主控制放入模板主体
+    # 降级为"补充提醒"，主控制放入模板主体
     "statistical.simple": "【补充提醒】简明分析性：先结论，少铺陈，3-5条要点优先。",
-    "statistical.attribution": "【补充提醒】归因解析型：区分主因/次因，无法验证因果需标注“推测”。",
+    "statistical.attribution": "【补充提醒】归因解析型：区分主因/次因，无法验证因果需标注'推测'。",
     "statistical.forecast": "【补充提醒】预测建议型：给短中期方向、风险触发条件和优先级建议。",
     "statistical.standard": "【补充提醒】综合标准型：保持概览/发现/原因/建议完整平衡。",
     "trend.simple": "【补充提醒】简明分析性：先给趋势结论，再列关键拐点。",
@@ -50,15 +55,9 @@ STYLE_APPENDIX = {
     "trend.standard": "【补充提醒】综合标准型：覆盖趋势、波动、维度差异与建议。"
 }
 
-METRIC_MAP = {
-    "sales_amount": "sales_amount",
-    "销售额": "sales_amount",
-    "order_count": "order_count",
-    "订单量": "order_count",
-    "订单数": "order_count",
-    "avg_order_value": "avg_order_value",
-    "客单价": "avg_order_value"
-}
+METRIC_MAP = {alias: k for k, v in METRICS.items() for alias in [k, v["label_cn"]]}
+# 补充中文别名（订单量/订单数 等）
+METRIC_MAP.update({"订单量": "order_count", "订单数": "order_count"})
 
 GRANULARITY_MAP = {
     "month": "month",
@@ -70,43 +69,15 @@ GRANULARITY_MAP = {
     "年": "year"
 }
 
-DIMENSION_MAP = {
-    "total": "total",
-    "总量": "total",
-    "genre": "genre",
-    "音乐流派": "genre",
-    "artist": "artist",
-    "艺术家": "artist",
-    "country": "country",
-    "国家": "country",
-    "city": "city",
-    "城市": "city",
-    "customer": "customer",
-    "客户": "customer",
-    "employee": "employee",
-    "员工": "employee"
-}
-
-METRIC_LABELS_CN = {
-    "sales_amount": "销售额",
-    "order_count": "订单数",
-    "avg_order_value": "客单价"
-}
+DIMENSION_MAP = {k: k for k in DIMENSIONS}
+DIMENSION_MAP.update({v["label_cn"]: k for k, v in DIMENSIONS.items()})
+# 补充特殊别名（如"音乐流派"→"genre"）
+DIMENSION_MAP.update({"音乐流派": "genre"})
 
 GRANULARITY_LABELS_CN = {
     "month": "月",
     "quarter": "季度",
     "year": "年"
-}
-
-DIMENSION_LABELS_CN = {
-    "total": "总量",
-    "genre": "流派",
-    "artist": "艺术家",
-    "country": "国家",
-    "city": "城市",
-    "customer": "客户",
-    "employee": "员工"
 }
 
 CHART_MEMORY: Dict[str, str] = {}
@@ -261,15 +232,18 @@ def get_cached_chart(key: str) -> Optional[str]:
 
 
 def get_frontend_schema() -> Dict[str, Any]:
+    # 动态从 schema_config 生成，新增/删除维度或指标只需改 schema_config.py
+    metric_labels   = [v["label_cn"] for v in METRICS.values()]
+    dim_labels      = [v["label_cn"] for v in DIMENSIONS.values()]
     return {
         "report_type": ["统计型", "趋势型"],
         "report_style": ["简明分析性", "归因解析型", "预测建议型", "综合标准型"],
-        "metric": ["销售额", "订单量", "客单价"],
+        "metric": metric_labels,
         "granularity": ["月", "季", "年"],
         "top_n": "int",
         "start_date": "YYYY-MM-DD",
         "end_date": "YYYY-MM-DD",
-        "dimensions": ["总量", "流派", "艺术家", "国家", "城市", "客户", "员工"]
+        "dimensions": dim_labels
     }
 
 
@@ -539,7 +513,7 @@ def _build_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metric: st
 
         lines.append(f"TopN合计占比：{_safe_float(dim_summary.get('topSharePct')):.2f}%")
         lines.append(f"其他合计占比：{_safe_float(dim_summary.get('othersSharePct')):.2f}%")
-        lines.append("口径说明：以上“其他”为除TopN外所有类别的合并项，禁止重新拆分或复算。")
+        lines.append("口径说明：以上'其他'为除TopN外所有类别的合并项，禁止重新拆分或复算。")
         blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks) if blocks else "（无维度明细数据）"
@@ -738,41 +712,29 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
 
 
 def _build_metric_semantics(metric: str) -> Dict[str, str]:
-    metric_cn = METRIC_LABELS_CN.get(metric, metric)
-
-    if metric == "sales_amount":
-        unit = "元"
-        definition = "销售额=时间范围内订单行金额合计（Σ UnitPrice×Quantity）"
-        share_denominator = "总体销售额"
-        trend_growth_definition = "趋势型增长率=（本期销售额-上期销售额）/上期销售额 × 100%"
-    elif metric == "order_count":
-        unit = "笔"
-        definition = "订单量=去重订单数（COUNT DISTINCT InvoiceId）"
-        share_denominator = "总体订单量"
-        trend_growth_definition = "趋势型增长率=（本期订单量-上期订单量）/上期订单量 × 100%"
-    else:
-        unit = "元/笔"
-        definition = "客单价=销售额/订单量（总销售额÷总订单数）"
-        share_denominator = "维度结构展示时按该指标汇总口径计算"
-        trend_growth_definition = "趋势型增长率=（本期客单价-上期客单价）/上期客单价 × 100%"
-
+    cfg = METRICS.get(metric, {})
+    metric_cn = cfg.get("label_cn", metric)
+    unit = cfg.get("unit", "")
     return {
         "metric_name": metric_cn,
         "metric_unit": unit,
-        "metric_definition": definition,
-        "share_denominator": share_denominator,
-        "trend_growth_definition": trend_growth_definition,
-        "value_interpretation": f"凡未特别说明，数值字段均表示“{metric_cn}”，单位“{unit}”。",
+        "metric_definition": cfg.get("definition", ""),
+        "share_denominator": cfg.get("share_denominator", ""),
+        "trend_growth_definition": cfg.get("trend_growth_definition", ""),
+        "value_interpretation": f"凡未特别说明，数值字段均表示'{metric_cn}'，单位'{unit}'。",
         "no_revalidation_note": "口径已在上文固定，禁止对占比与增长率定义进行二次验证或改写。"
     }
 
 
 def _format_metric_value(metric: str, value: float) -> str:
-    if metric == "order_count":
-        return f"{value:,.0f} 笔"
-    if metric == "avg_order_value":
-        return f"{value:,.2f} 元/笔"
-    return f"{value:,.2f} 元"
+    cfg = METRICS.get(metric, {})
+    fmt = cfg.get("format", "currency")
+    unit = cfg.get("unit", "")
+    if fmt == "count":
+        return f"{value:,.0f} {unit}"
+    if fmt == "ratio":
+        return f"{value:,.2f} {unit}"
+    return f"{value:,.2f} {unit}"
 
 
 def _build_total_series_text(series: List[Dict[str, Any]], metric: str) -> str:
@@ -802,19 +764,19 @@ def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
         "# 维度关键发现\n"
         "# 原因分析\n"
         "# 建议\n"
-        "3) 除“维度关键发现”外，其他一级标题下不要创建维度型二级标题。\n"
+        "3) 除'维度关键发现'外，其他一级标题下不要创建维度型二级标题。\n"
     )
     if selected_dim_titles:
         dim_lines = "\n".join([f"## {t}" for t in selected_dim_titles])
         dim_part = (
-            "4) 在“维度关键发现”章节下，只能使用以下二级标题（名称必须完全一致）：\n"
+            "4) 在'维度关键发现'章节下，只能使用以下二级标题（名称必须完全一致）：\n"
             f"{dim_lines}\n"
             "5) 不得输出未在上述列表中的维度二级标题。\n"
-            "6) 若某个允许维度数据不足，可在该标题下说明“数据不足”，但不能改标题、不能删标题。\n"
+            "6) 若某个允许维度数据不足，可在该标题下说明'数据不足'，但不能改标题、不能删标题。\n"
         )
     else:
         dim_part = (
-            "4) 本次未选择维度。在“维度关键发现”下不要输出二级标题，可写“本次未选择维度分析”。\n"
+            "4) 本次未选择维度。在'维度关键发现'下不要输出二级标题，写本次'未选择维度分析'。\n"
             "5) 不得新增任何维度型二级标题。\n"
         )
     tail = "7) 不要输出任何图片占位符（如 {{image:...}}）,图片由系统后处理插入。"
@@ -849,14 +811,14 @@ def _build_report_style_contract(report_style: Optional[str]) -> Dict[str, str]:
             "writing_goal": "先结论后展开，用最少文字表达最关键发现。",
             "focus_rule": "优先输出3-5条关键结论，每条尽量附数字证据。",
             "reasoning_rule": "只保留必要解释，避免冗长推演。",
-            "advice_rule": "建议简洁明确，不超过3-5条。",
+            "advice_rule": "建议简洁明晰，不超过3-5条。",
             "language_rule": "语言精炼，管理层快速可读。"
         },
         "attribution": {
             "style_name": "归因解析型",
             "writing_goal": "不仅描述现象，还要解释变化由谁驱动、为什么发生。",
             "focus_rule": "必须区分主因、次因，并说明结构占比与关键贡献来源。",
-            "reasoning_rule": "优先解释业务机制；无法验证因果必须标注“推测”。",
+            "reasoning_rule": "优先解释业务机制；无法验证因果必须标注推测",
             "advice_rule": "建议需与原因分析一一对应。",
             "language_rule": "强调因果链路和证据对应。"
         },
@@ -993,7 +955,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             )
 
         llm_data = (prompt_data.get("llmSummary") or {}).get("statistical" if report_type == "statistical" else "trend") or {}
-        role_context = {"analyst_level": "资深数据分析师", "domain": "销售数据", "decision_type": "经营决策", "report_audience": "管理层"}
+        role_context = ROLE_CONTEXT   # ← 原来是写死的字典，现在从 schema_config 读取
 
         basic_stats = llm_data.get("basicStats", {}) if isinstance(llm_data, dict) else {}
         total_sales = _compute_total_metric("sales_amount", granularity, since, until)

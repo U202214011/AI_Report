@@ -304,7 +304,7 @@
           <option value="right">右对齐</option>
         </select>
         <div class="cb-row" style="margin-top:8px;">
-          <label><input id="footer_pagenum" type="checkbox" checked />显示页码</label>
+          <label><input id="footer_pagenum" type="checkbox" checked />显示��码</label>
           <label><input id="footer_total" type="checkbox" />显示总页数</label>
         </div>
         <div class="row">
@@ -342,7 +342,7 @@
       </div>
 
       <label style="margin-top:8px;">
-        <input id="autoPreview" type="checkbox" checked style="width:auto;margin-right:6px;" />
+        <input id="autoPreview" type="checkbox" style="width:auto;margin-right:6px;" />
         自动预览（停止输入后 600ms）
       </label>
 
@@ -374,9 +374,15 @@
   const errEl = $("errorBox");
   const liveDot = $("liveDot");
   const previewEl = $("docxPreview");
+  const btnPreview = $("btnPreview");
 
   let previewTimer = null;
   let requestSeq = 0;
+
+  // 增强：并发控制 + 尾触发
+  let previewInflight = false;
+  let previewQueued = false;
+  let saveInflight = false;
 
   function setStatus(msg, ok=true){
     statusEl.className = "status " + (ok ? "ok" : "err");
@@ -389,9 +395,10 @@
     errEl.textContent = msg;
   }
 
+  // 修复：黑色也要写入模板（不再过滤 #000000）
   function colorVal(id) {
-    const v = $(id).value;
-    return (v && v !== "#000000") ? v : undefined;
+    const v = ($(id).value || "").trim();
+    return v || undefined;
   }
 
   function cfg(){
@@ -539,12 +546,18 @@
     };
   }
 
-  async function previewDocx() {
+  function setPreviewBusy(busy) {
+    btnPreview.disabled = !!busy;
+    btnPreview.textContent = busy ? "预览中..." : "立即预览";
+  }
+
+  async function doPreviewDocxCore() {
     const seq = ++requestSeq;
     setError("");
     setStatus("正在生成预览...");
     metaEl.textContent = "请求后端生成 DOCX...";
     liveDot.classList.remove("live");
+    setPreviewBusy(true);
 
     try {
       if (typeof docx === "undefined" || !docx.renderAsync) {
@@ -567,6 +580,8 @@
       }
 
       const arr = await res.arrayBuffer();
+
+      // 如果本次已过期，直接丢弃
       if (seq < requestSeq) return;
 
       previewEl.innerHTML = "";
@@ -589,10 +604,41 @@
       setError("预览失败： " + msg);
       metaEl.textContent = "预览失败";
       console.error(e);
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  async function previewDocx() {
+    // 正在预览：仅记录“需要再来一次”
+    if (previewInflight) {
+      previewQueued = true;
+      return;
+    }
+
+    previewInflight = true;
+    try {
+      await doPreviewDocxCore();
+    } finally {
+      previewInflight = false;
+    }
+
+    // 尾触发：期间如果有新请求，只跑最后一次
+    if (previewQueued) {
+      previewQueued = false;
+      previewDocx();
     }
   }
 
   async function saveTpl(){
+    if (saveInflight) return;
+    saveInflight = true;
+
+    const btnSave = $("btnSave");
+    const oldText = btnSave.textContent;
+    btnSave.disabled = true;
+    btnSave.textContent = "保存中...";
+
     setStatus("正在保存模板...");
     setError("");
     try {
@@ -616,6 +662,10 @@
       const msg = e?.message || String(e);
       setStatus("保存失败", false);
       setError("保存失败： " + msg);
+    } finally {
+      btnSave.disabled = false;
+      btnSave.textContent = oldText;
+      saveInflight = false;
     }
   }
 
@@ -669,7 +719,7 @@
       const c = await res.json();
       fillForm(c);
       setStatus("模板已加载: " + (c.name || id));
-      schedulePreview();
+      schedulePreview(); // 仅在 autoPreview 开启时触发
     } catch (e) {
       setError("加载失败: " + (e.message || e));
     }
@@ -796,7 +846,8 @@
     if ($("autoPreview").checked) schedulePreview();
   });
 
-  previewDocx();
+  // 默认不自动首屏预览，减少初次卡顿
+  // previewDocx();
 })();
 </script>
 </body>

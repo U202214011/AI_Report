@@ -10,11 +10,12 @@ import numpy as np
 import re
 from decimal import Decimal
 from utils import get_db_connection
+from schema_config import METRICS, DIMENSIONS, FROM_CLAUSE_SIMPLE, FROM_CLAUSE_FULL, DATE_FIELD
 
 # ---------- 时间表达式 ----------
 
 def invoice_datetime_expr() -> str:
-    return "i.InvoiceDate"
+    return DATE_FIELD
 
 def granularity_expression(gran: str) -> str:
     dt = invoice_datetime_expr()
@@ -30,42 +31,24 @@ def granularity_expression(gran: str) -> str:
         return f"DATE_FORMAT({dt}, '%Y')"
     raise ValueError(f"unknown granularity: {gran}")
 
-# 统一口径(B)：sales_amount 使用行金额
+# 统一口径(B)：sales_amount ��用行金额
 def metric_sql(metric: str) -> str:
-    if metric == 'sales_amount':
-        return "IFNULL(SUM(il.UnitPrice * il.Quantity), 0) AS value"
-    if metric == 'order_count':
-        return "COUNT(DISTINCT i.InvoiceId) AS value"
-    if metric == 'avg_order_value':
-        return "IFNULL(SUM(il.UnitPrice * il.Quantity) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
-    raise ValueError(f"unknown metric: {metric}")
+    cfg = METRICS.get(metric)
+    if not cfg:
+        raise ValueError(f"unknown metric: {metric}")
+    return cfg["sql"]
 
 # 维度查询口径保持一致
 def metric_sql_with_lines(metric: str) -> str:
-    if metric == 'sales_amount':
-        return "IFNULL(SUM(il.UnitPrice * il.Quantity), 0) AS value"
-    if metric == 'order_count':
-        return "COUNT(DISTINCT i.InvoiceId) AS value"
-    if metric == 'avg_order_value':
-        return "IFNULL(SUM(il.UnitPrice * il.Quantity) / NULLIF(COUNT(DISTINCT i.InvoiceId), 0), 0) AS value"
-    raise ValueError(f"unknown metric: {metric}")
+    return metric_sql(metric)
 
 # ---------- 维度表达式 ----------
 
 def dimension_expression(dimension: str) -> Tuple[str, str]:
-    if dimension == 'genre':
-        return "g.Name", "genre"
-    if dimension == 'artist':
-        return "ar.Name", "artist"
-    if dimension == 'country':
-        return "c.Country", "country"
-    if dimension == 'city':
-        return "c.City", "city"
-    if dimension == 'customer':
-        return "CONCAT(c.FirstName,' ',c.LastName)", "customer"
-    if dimension == 'employee':
-        return "CONCAT(e.FirstName,' ',e.LastName)", "employee"
-    raise ValueError(f"unknown dimension: {dimension}")
+    cfg = DIMENSIONS.get(dimension)
+    if not cfg or cfg["expr"] is None:
+        raise ValueError(f"unknown dimension: {dimension}")
+    return cfg["expr"], cfg["alias"]
 
 # ---------- 时间范围工具 ----------
 
@@ -213,22 +196,10 @@ def run_query(sql: str, params: List[Any]) -> List[Dict[str, Any]]:
 # ---------- 趋势查询 ----------
 
 def _invoice_line_from_clause() -> str:
-    return """
-    FROM Invoice i
-    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
-    """
+    return FROM_CLAUSE_SIMPLE
 
 def _dimension_from_clause() -> str:
-    return """
-    FROM Invoice i
-    JOIN Customer c ON i.CustomerId = c.CustomerId
-    LEFT JOIN Employee e ON c.SupportRepId = e.EmployeeId
-    JOIN InvoiceLine il ON i.InvoiceId = il.InvoiceId
-    JOIN Track t ON il.TrackId = t.TrackId
-    JOIN Album al ON t.AlbumId = al.AlbumId
-    JOIN Artist ar ON al.ArtistId = ar.ArtistId
-    JOIN Genre g ON t.GenreId = g.GenreId
-    """
+    return FROM_CLAUSE_FULL
 
 def build_period_trend(metric: str, granularity: str, since=None, until=None) -> Tuple[str, List[Any]]:
     params = []
@@ -466,19 +437,9 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
             continue
         placeholders = ','.join(['%s'] * len(vals))
         params.extend(vals)
-
-        if k == 'genre':
-            where_clauses.append(f"g.Name IN ({placeholders})")
-        elif k == 'artist':
-            where_clauses.append(f"ar.Name IN ({placeholders})")
-        elif k == 'country':
-            where_clauses.append(f"c.Country IN ({placeholders})")
-        elif k == 'city':
-            where_clauses.append(f"c.City IN ({placeholders})")
-        elif k == 'customer':
-            where_clauses.append(f"CONCAT(c.FirstName,' ',c.LastName) IN ({placeholders})")
-        elif k == 'employee':
-            where_clauses.append(f"CONCAT(e.FirstName,' ',e.LastName) IN ({placeholders})")
+        dim_cfg = DIMENSIONS.get(k)
+        if dim_cfg and dim_cfg.get("filter_col"):
+            where_clauses.append(f"{dim_cfg['filter_col']} IN ({placeholders})")
         else:
             where_clauses.append(f"{k} IN ({placeholders})")
 
@@ -494,24 +455,10 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
         group_parts.append("period")
 
     for d in dims:
-        if d == 'genre':
-            select_parts.append("g.Name AS genre")
-            group_parts.append("genre")
-        elif d == 'artist':
-            select_parts.append("ar.Name AS artist")
-            group_parts.append("artist")
-        elif d == 'country':
-            select_parts.append("c.Country AS country")
-            group_parts.append("country")
-        elif d == 'city':
-            select_parts.append("c.City AS city")
-            group_parts.append("city")
-        elif d == 'customer':
-            select_parts.append("CONCAT(c.FirstName,' ',c.LastName) AS customer")
-            group_parts.append("customer")
-        elif d == 'employee':
-            select_parts.append("CONCAT(e.FirstName,' ',e.LastName) AS employee")
-            group_parts.append("employee")
+        dim_cfg = DIMENSIONS.get(d)
+        if dim_cfg and dim_cfg.get("expr"):
+            select_parts.append(f"{dim_cfg['expr']} AS {dim_cfg['alias']}")
+            group_parts.append(dim_cfg['alias'])
 
     select_parts.append(metric_sql_with_lines(metric))
 

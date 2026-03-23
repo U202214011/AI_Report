@@ -1,7 +1,7 @@
 {
   "id": "cn_professional_report",
-  "name": "模板3-专业报告",
-  "description": "A4专业风格，含页眉页脚、页码、代码块、表格",
+  "name": "模板3",
+  "description": "A4+页眉页脚",
   "page": {
     "size": "A4",
     "orientation": "portrait",

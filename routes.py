@@ -29,17 +29,14 @@ from export_service import (
     render_markdown_to_docx_bytes,
     build_export_filename,
     inject_placeholders_by_sections,
-    save_user_template_config,   # ✅ 新增：保存用户模板
-    delete_user_template_config,  # ✅ 新增：删除用户模板
+    save_user_template_config,
+    delete_user_template_config,
 )
+from schema_config import get_metric_label_map, build_selected_dimensions
 
 logger = logging.getLogger(__name__)
 
-METRIC_LABELS = {
-    "sales_amount": "销售额",
-    "order_count": "订单数",
-    "avg_order_value": "客单价"
-}
+METRIC_LABELS = get_metric_label_map()
 
 SHOW_BAR_IN_TREND = True
 SHOW_PIE_IN_STAT = True
@@ -572,26 +569,7 @@ def register_routes(app):
         plot_images = payload.get("plot_images") or {}
 
         selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
-        dim_title_map = {
-            "genre": "流派",
-            "artist": "艺术家",
-            "country": "国家",
-            "city": "城市",
-            "customer": "客户",
-            "employee": "员工"
-        }
-
-        selected_dimensions = []
-        for k in selected_dim_keys:
-            kk = str(k).strip().lower()
-            if kk == "total":
-                continue
-            if kk in dim_title_map:
-                selected_dimensions.append({
-                    "key": kk,
-                    "title": dim_title_map[kk],
-                    "aliases": [kk, dim_title_map[kk]]
-                })
+        selected_dimensions = build_selected_dimensions(selected_dim_keys)
 
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400

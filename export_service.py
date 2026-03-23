@@ -14,6 +14,7 @@ from docx.enum.section import WD_ORIENTATION
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+from schema_config import get_dimension_alias_map, get_dimension_title_map
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "export_templates")
 
@@ -538,26 +539,7 @@ def _add_markdown_table(doc: Document, rows: List[List[str]], cfg: Dict[str, Any
 # ---------------------------
 # 你原有的“按章节注入图片占位符”逻辑（保持）
 # ---------------------------
-
 _HEADING_LINE_RE = re.compile(r'^(#{1,6})\s+(.*?)\s*$')
-
-_DIMENSION_ALIAS_DEFAULT: Dict[str, List[str]] = {
-    "genre": ["genre", "流派", "音乐流派"],
-    "artist": ["artist", "艺术家"],
-    "country": ["country", "国家"],
-    "city": ["city", "城市"],
-    "customer": ["customer", "客户"],
-    "employee": ["employee", "员工"]
-}
-
-_DIMENSION_TITLE_DEFAULT: Dict[str, str] = {
-    "genre": "流派",
-    "artist": "艺术家",
-    "country": "国家",
-    "city": "城市",
-    "customer": "客户",
-    "employee": "员工"
-}
 
 
 def _normalize_text_compact(text: str) -> str:
@@ -584,8 +566,11 @@ def _parse_headings(lines: List[str]) -> List[Dict[str, Any]]:
 def _build_dimension_maps(
     selected_dimensions: Optional[List[Dict[str, Any]]]
 ) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    default_title_map = get_dimension_title_map(include_total=False)
+    default_alias_map = get_dimension_alias_map(include_total=False)
+
     if not selected_dimensions:
-        return dict(_DIMENSION_TITLE_DEFAULT), dict(_DIMENSION_ALIAS_DEFAULT)
+        return dict(default_title_map), dict(default_alias_map)
 
     title_map: Dict[str, str] = {}
     alias_map: Dict[str, List[str]] = {}
@@ -593,25 +578,28 @@ def _build_dimension_maps(
     for item in selected_dimensions:
         if not isinstance(item, dict):
             continue
+
         k = str(item.get("key") or "").strip().lower()
         t = str(item.get("title") or "").strip()
         aliases = item.get("aliases") or []
 
         if not k:
             continue
+
         if not t:
-            t = _DIMENSION_TITLE_DEFAULT.get(k, k)
+            t = default_title_map.get(k, k)
 
         alias_list = [k, t] + [str(a).strip() for a in aliases if str(a).strip()]
-        alias_list += _DIMENSION_ALIAS_DEFAULT.get(k, [])
+        alias_list += default_alias_map.get(k, [])
+
         seen = set()
         cleaned = []
         for a in alias_list:
-            aa = a.lower()
-            if aa in seen:
+            aa = str(a).strip().lower()
+            if not aa or aa in seen:
                 continue
             seen.add(aa)
-            cleaned.append(a)
+            cleaned.append(str(a).strip())
 
         title_map[k] = t
         alias_map[k] = cleaned

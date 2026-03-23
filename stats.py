@@ -2,9 +2,11 @@ from flask import jsonify
 import pandas as pd
 import matplotlib.pyplot as plt
 from .utils import get_db_connection, fig_to_base64, build_where_clause
+from .schema_config import DIMENSIONS
 
 SUPPORTED_DIMENSIONS = [
-    'genre', 'country', 'city', 'artist', 'customer', 'employee'
+    key for key in DIMENSIONS.keys()
+    if key != "total"
 ]
 
 def preview_stats(config):

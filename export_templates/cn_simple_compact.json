@@ -1,7 +1,7 @@
 {
   "id": "cn_simple_compact",
-  "name": "数据报告-A4（宋体/楷体）",
-  "description": "数据分析报告风格，行距紧凑，适合数据密集型内容",
+  "name": "模板2",
+  "description": "A4宋体/楷体",
   "page": {
     "size": "A4",
     "margin_cm": [2.0, 1.8, 2.0, 1.8]

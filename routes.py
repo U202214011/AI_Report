@@ -1,5 +1,10 @@
 import logging
+import json
+import re
+import html
+from io import BytesIO
 from flask import request, jsonify, render_template, Response, send_file
+
 from api_adapter import normalize_request
 from report_adapter import adapt_report_output
 from prompt_data import build_prompt_bundle
@@ -18,16 +23,13 @@ from report_service import (
     normalize_time_range_for_debug
 )
 from llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
-import json
-import re  # 新增
-from flask import request, jsonify, render_template, Response, send_file
-from io import BytesIO
 from export_service import (
     list_export_templates,
     load_template_config,
     render_markdown_to_docx_bytes,
     build_export_filename,
-    inject_placeholders_by_sections
+    inject_placeholders_by_sections,
+    save_user_template_config,   # ✅ 新增：保存用户模板
 )
 
 logger = logging.getLogger(__name__)
@@ -45,8 +47,8 @@ MODEL_CONTEXT_LIMIT = 128000
 CONTEXT_WARN_RATIO = 0.80
 CONTEXT_DANGER_RATIO = 0.92
 
-# 新增：用于前端判断 prompt 可用性
 _UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
+
 
 def _has_unresolved_placeholders(text: str) -> bool:
     return bool(_UNRESOLVED_PLACEHOLDER_RE.search(text or ""))
@@ -93,7 +95,7 @@ def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
         "prompt": {
             "isEmpty": len(prompt_text.strip()) == 0,
             "length": len(prompt_text),
-            "hasUnresolvedPlaceholders": _has_unresolved_placeholders(prompt_text),  # 新增
+            "hasUnresolvedPlaceholders": _has_unresolved_placeholders(prompt_text),
             "templateDebug": template_debug
         },
         "consistency": {
@@ -129,12 +131,39 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+
 def _sse_message(data) -> str:
-    # 默认 message 事件，兼容前端 onmessage
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
 
 def _log_sse_chunk(route_name: str, idx: int, chunk_type: str, content: str):
     logger.info(f"[{route_name}] chunk#{idx} type={chunk_type} len={len(content or '')}")
+
+
+def _build_preview_html(report_title: str, report_markdown: str, template_cfg: dict) -> str:
+    fonts = template_cfg.get("fonts", {})
+    body_font = fonts.get("body", {"family": "宋体", "size_pt": 11})
+    h1_font = fonts.get("h1", {"family": "微软雅黑", "size_pt": 15})
+    page = template_cfg.get("page", {})
+    margins = page.get("margin_cm", [2.5, 2.2, 2.5, 2.2])
+    p_body = template_cfg.get("paragraph_styles", {}).get("body", {})
+    line_spacing = p_body.get("line_spacing", 1.5)
+
+    safe_title = html.escape(report_title or "模板预览")
+    safe_text = html.escape(report_markdown or "").replace("\n", "<br/>")
+
+    return f"""
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
+      <div style="margin:{margins[0]}cm {margins[1]}cm {margins[2]}cm {margins[3]}cm;">
+        <h1 style="margin:0 0 10px 0;font-family:{h1_font.get('family','微软雅黑')};font-size:{h1_font.get('size_pt',15)}pt;">
+          {safe_title}
+        </h1>
+        <div style="font-family:{body_font.get('family','宋体')};font-size:{body_font.get('size_pt',11)}pt;line-height:{line_spacing};">
+          {safe_text}
+        </div>
+      </div>
+    </div>
+    """
 
 
 def register_routes(app):
@@ -242,8 +271,7 @@ def register_routes(app):
         show_reasoning = bool(payload.get("show_reasoning", True))
 
         logger.info(f"[/api/chat/sse] payload_keys={list(payload.keys())}")
-        logger.info(
-            f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
+        logger.info(f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
 
         if not isinstance(messages, list) or len(messages) == 0:
             return jsonify({"message": "messages 不能为空"}), 400
@@ -324,7 +352,7 @@ def register_routes(app):
                     bar_rows = build_total_rows(rows)
                     if bar_rows:
                         plots.append({
-                            "title": f"总量 {gran} 柱状图",
+                            "title": f"总量 {gran} 柱状��",
                             "image": generate_grouped_bar_chart(
                                 bar_rows, granularity=gran, period_key="period", dim_key="dimension",
                                 categories=["总量"], periods=periods_for_chart, y_label=metric_label, x_label="时间"
@@ -436,7 +464,7 @@ def register_routes(app):
                 "tables": [],
                 "data": data,
                 "prompt": prompt_bundle.get("prompt"),
-                "finalPrompt": prompt_bundle.get("prompt"),  # 新增：统一“最终发送给LLM”的文本
+                "finalPrompt": prompt_bundle.get("prompt"),
                 "promptData": prompt_bundle.get("promptData"),
                 "frontendSchema": prompt_bundle.get("frontendSchema"),
                 "templateDebug": prompt_bundle.get("templateDebug", {})
@@ -457,19 +485,66 @@ def register_routes(app):
         except Exception as e:
             return jsonify({"message": str(e)}), 500
 
+    # ✅ 新增：保存用户自定义模板
+    @app.route("/api/export/template/save", methods=["POST"])
+    def export_template_save():
+        payload = request.get_json() or {}
+        template_config = payload.get("template_config") or {}
+
+        if not isinstance(template_config, dict) or not template_config:
+            return jsonify({"message": "template_config 不能为空"}), 400
+
+        try:
+            saved = save_user_template_config(template_config)
+            return jsonify({"ok": True, "template_id": saved.get("id")})
+        except Exception as e:
+            logger.exception("[EXPORT_TEMPLATE_SAVE] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
+
+
+    @app.route("/template-designer")
+    def template_designer():
+        return render_template("template_designer.html")
+
+    # 放在 register_routes(app) 内
+    @app.route("/api/export/template/preview-docx", methods=["POST"])
+    def export_template_preview_docx():
+        payload = request.get_json() or {}
+        template_config = payload.get("template_config") or {}
+        report_title = (payload.get("report_title") or "").strip() or "模板预览"
+        report_markdown = (payload.get("report_markdown") or "").strip()
+
+        if not report_markdown:
+            report_markdown = "# 模板预览\n\n这是一段正文预览。"
+
+        if not isinstance(template_config, dict) or not template_config:
+            return jsonify({"message": "template_config 不能为空"}), 400
+
+        try:
+            docx_bytes = render_markdown_to_docx_bytes(
+                markdown_text=report_markdown,
+                template_cfg=template_config,
+                report_title=report_title,
+                images={}
+            )
+            return Response(
+                docx_bytes,
+                mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        except Exception as e:
+            logger.exception("[PREVIEW_DOCX] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
+
     @app.route("/api/export/report", methods=["POST"])
     def export_report():
         payload = request.get_json() or {}
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
+        template_config = payload.get("template_config")  # ✅ 新增：支持前端直接传配置
         report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
         plot_images = payload.get("plot_images") or {}
 
-        # ✅ 新增：接收本次维度（建议前端传 normalized.dimensions）
-        # 例如: ["total","artist","country"] 或 ["artist","country"]
         selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
-
-        # 维度标题映射（与 prompt_data 保持一致）
         dim_title_map = {
             "genre": "流派",
             "artist": "艺术家",
@@ -516,7 +591,12 @@ def register_routes(app):
             if inject_debug.get("unmatched_to_appendix"):
                 logger.warning("[EXPORT][appendix_fallback] keys=%s", inject_debug.get("unmatched_to_appendix"))
 
-            cfg = load_template_config(template_id)
+            # ✅ custom 配置优先
+            if template_config and isinstance(template_config, dict):
+                cfg = template_config
+            else:
+                cfg = load_template_config(template_id)
+
             docx_bytes = render_markdown_to_docx_bytes(
                 markdown_text=markdown_text,
                 template_cfg=cfg,

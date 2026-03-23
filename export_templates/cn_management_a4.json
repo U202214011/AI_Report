@@ -1,7 +1,7 @@
 {
   "id": "cn_management_a4",
-  "name": "简报-A4（微软雅黑/宋体）",
-  "description": "中文管理汇报风格，标题突出，正文易读",
+  "name": "模板1-A4",
+  "description": "A4微软雅黑/宋体",
   "page": {
     "size": "A4",
     "margin_cm": [2.5, 2.2, 2.5, 2.2]

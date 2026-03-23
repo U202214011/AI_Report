@@ -5,150 +5,62 @@
   <title>Chinook 报告对话工作台</title>
   <style>
     :root{
-      --bg:#f6f8fb;
-      --panel:#ffffff;
-      --line:#e5e7eb;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --brand:#2563eb;
-      --u-bg:#eff6ff;
-      --u-bd:#dbeafe;
-      --a-bg:#f9fafb;
-      --a-bd:#e5e7eb;
-      --r-bg:#fff7ed;
-      --r-bd:#fed7aa;
+      --bg:#f6f8fb; --panel:#ffffff; --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --brand:#2563eb; --u-bg:#eff6ff; --u-bd:#dbeafe; --a-bg:#f9fafb; --a-bd:#e5e7eb;
+      --r-bg:#fff7ed; --r-bd:#fed7aa;
     }
-
     * { box-sizing: border-box; }
     body { margin:0; font-family:"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-
-    .layout { display:grid; grid-template-columns:340px 1fr 1fr; height:100vh; gap:0; }
-
-    .col {
-      background: var(--panel);
-      min-width: 0;
-      overflow: hidden;
-      display:flex;
-      flex-direction:column;
-    }
+    .layout { display:grid; grid-template-columns:360px 1fr 1fr; height:100vh; }
+    .col { background: var(--panel); min-width: 0; overflow: hidden; display:flex; flex-direction:column; }
     .col + .col { border-left:1px solid var(--line); }
-
-    .panel-head{
-      height:52px;
-      border-bottom:1px solid var(--line);
-      display:flex; align-items:center; justify-content:space-between;
-      padding:0 14px;
-      background:#fff;
-      flex-shrink:0;
-    }
-
-    .panel-body{
-      flex:1;
-      overflow:auto;
-      padding:12px;
-      min-height:0;
-    }
-
+    .panel-head{ height:52px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; padding:0 14px; background:#fff; flex-shrink:0; }
+    .panel-body{ flex:1; overflow:auto; padding:12px; min-height:0; }
     .badge { padding:4px 10px; border-radius:999px; font-size:12px; }
-    .ok { background:#e8f8ee; color:#166534; }
-    .warn { background:#fff7e6; color:#92400e; }
-    .danger { background:#feecec; color:#991b1b; }
-
+    .ok { background:#e8f8ee; color:#166534; } .warn { background:#fff7e6; color:#92400e; } .danger { background:#feecec; color:#991b1b; }
     .tiny { font-size:12px; color:var(--muted); }
     .row { display:flex; gap:8px; margin:8px 0; }
-
-    textarea, input, select {
-      width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px; font:inherit;
-    }
+    textarea, input, select { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px; font:inherit; }
     textarea { height:110px; resize:none; }
-    button {
-      border:none; background:var(--brand); color:#fff; border-radius:8px; padding:0 14px; cursor:pointer;
-    }
+    button { border:none; background:var(--brand); color:#fff; border-radius:8px; padding:0 14px; cursor:pointer; height:36px; }
     button:disabled { opacity:.6; cursor:not-allowed; }
     .btn2 { background:#4b5563; }
 
     .toggle { display:flex; align-items:center; gap:6px; font-size:12px; }
 
-    .msg {
-      margin-bottom:10px;
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid var(--a-bd);
-      background:var(--a-bg);
-      line-height:1.6;
-      overflow-wrap:anywhere;
-    }
-    .u { background:var(--u-bg); border-color:var(--u-bd); }
-    .a { background:var(--a-bg); border-color:var(--a-bd); }
-    .r { background:var(--r-bg); border-color:var(--r-bd); }
-
-    .msg-role{
-      font-size:12px; color:var(--muted); margin-bottom:6px;
-    }
+    .msg { margin-bottom:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--a-bd); background:var(--a-bg); line-height:1.6; overflow-wrap:anywhere; }
+    .u { background:var(--u-bg); border-color:var(--u-bd); } .a { background:var(--a-bg); border-color:var(--a-bd); } .r { background:var(--r-bg); border-color:var(--r-bd); }
+    .msg-role{ font-size:12px; color:var(--muted); margin-bottom:6px; }
 
     .md h1,.md h2,.md h3,.md h4 { margin:.6em 0 .4em; line-height:1.35; }
-    .md h1{ font-size:1.35rem; }
-    .md h2{ font-size:1.2rem; }
-    .md h3{ font-size:1.05rem; }
-    .md p { margin:.45em 0; }
-    .md ul,.md ol { margin:.4em 0 .4em 1.2em; }
-    .md blockquote{
-      margin:.5em 0; padding:.45em .75em;
-      border-left:4px solid #d1d5db; color:#374151; background:#fafafa;
-    }
-    .md code{
-      background:#f3f4f6; padding:.1em .35em; border-radius:4px;
-      font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace;
-      font-size:.92em;
-    }
-    .md pre{
-      background:#0b1020; color:#e5e7eb; padding:10px; border-radius:8px; overflow:auto;
-      font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace;
-      font-size:.88em;
-    }
+    .md h1{ font-size:1.35rem; } .md h2{ font-size:1.2rem; } .md h3{ font-size:1.05rem; }
+    .md p { margin:.45em 0; } .md ul,.md ol { margin:.4em 0 .4em 1.2em; }
+    .md blockquote{ margin:.5em 0; padding:.45em .75em; border-left:4px solid #d1d5db; color:#374151; background:#fafafa; }
+    .md code{ background:#f3f4f6; padding:.1em .35em; border-radius:4px; font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace; font-size:.92em; }
+    .md pre{ background:#0b1020; color:#e5e7eb; padding:10px; border-radius:8px; overflow:auto; font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace; font-size:.88em; }
     .md pre code{ background:transparent; padding:0; color:inherit; }
 
-    .composer{
-      border-top:1px solid var(--line);
-      padding:10px;
-      display:grid;
-      grid-template-columns:1fr auto;
-      gap:8px;
-      background:#fff;
-      flex-shrink:0;
-    }
-
-    .prompt-box {
-      white-space: pre-wrap;
-      font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace;
-      font-size: 12px;
-      line-height: 1.55;
-      background: #fcfcff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 10px;
-    }
-
+    .composer{ border-top:1px solid var(--line); padding:10px; display:grid; grid-template-columns:1fr auto; gap:8px; background:#fff; flex-shrink:0; }
+    .prompt-box { white-space: pre-wrap; font-family: ui-monospace, Menlo, Monaco, "Courier New", monospace; font-size: 12px; line-height: 1.55; background: #fcfcff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
     .plots img { max-width:100%; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:8px; }
 
+    .tpl-card{ border:1px solid #e5e7eb; border-radius:8px; padding:8px; margin-top:8px; background:#fbfdff; }
+    .tpl-preview{
+      margin-top:8px; border:1px dashed #cbd5e1; border-radius:8px; background:#fff;
+      padding:12px; max-height:220px; overflow:auto;
+    }
+
     @media (max-width: 1200px){
-      .layout{ grid-template-columns: 320px 1fr; }
-      .col-preview{
-        grid-column: 1 / -1;
-        border-top:1px solid var(--line);
-        border-left:none !important;
-        height:45vh;
-      }
+      .layout{ grid-template-columns: 340px 1fr; }
+      .col-preview{ grid-column: 1 / -1; border-top:1px solid var(--line); border-left:none !important; height:45vh; }
     }
   </style>
 </head>
 <body>
 <div class="layout">
-  <!-- 左栏：配置 + 导出 -->
   <aside class="col col-config">
     <div class="panel-head"><strong>数据库筛选配置</strong></div>
     <div class="panel-body">
-
       <label>报告类型</label>
       <select id="report_type">
         <option value="stat">统计型</option>
@@ -183,14 +95,8 @@
       </div>
 
       <div class="row">
-        <div style="flex:1;">
-          <label>开始</label>
-          <input id="start_date" type="date" />
-        </div>
-        <div style="flex:1;">
-          <label>结束</label>
-          <input id="end_date" type="date" />
-        </div>
+        <div style="flex:1;"><label>开始</label><input id="start_date" type="date" /></div>
+        <div style="flex:1;"><label>结束</label><input id="end_date" type="date" /></div>
       </div>
 
       <label>Top N</label>
@@ -213,20 +119,85 @@
       </div>
 
       <label class="toggle">
-        <input type="checkbox" id="showReasoning" checked />
-        显示思考过程（reasoning）
+        <input type="checkbox" id="showReasoning" checked /> 显示思考过程（reasoning）
       </label>
 
       <hr style="margin:12px 0;border:none;border-top:1px solid #eee;" />
       <div class="tiny" style="margin-bottom:6px;">报告导出</div>
 
       <label>导出模板</label>
-      <select id="exportTemplate">
-        <option value="">加载中...</option>
-      </select>
+      <select id="exportTemplate"><option value="">加载中...</option></select>
 
       <label style="margin-top:8px; display:block;">导出标题（可选）</label>
       <input id="exportTitle" type="text" placeholder="例如：2026年Q1销售分析报告" />
+
+      <!-- 少量可配置项 -->
+      <div class="tpl-card">
+        <div class="tiny" style="margin-bottom:6px;">模板微调（少量配置）</div>
+        <label class="toggle"><input type="checkbox" id="useCustomTpl"> 启用自定义模板配置</label>
+
+        <div id="customTplForm" style="display:none;">
+          <div class="row">
+            <div style="flex:1;">
+              <label>模板ID</label>
+              <input id="tpl_id" type="text" placeholder="my_custom_tpl" />
+            </div>
+            <div style="flex:1;">
+              <label>模板名称</label>
+              <input id="tpl_name" type="text" placeholder="我的模板" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1;">
+              <label>正文字体</label>
+              <input id="tpl_body_font" type="text" value="宋体" />
+            </div>
+            <div style="flex:1;">
+              <label>正文字号</label>
+              <input id="tpl_body_size" type="number" value="11" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1;">
+              <label>H1 字体</label>
+              <input id="tpl_h1_font" type="text" value="微软雅黑" />
+            </div>
+            <div style="flex:1;">
+              <label>H1 字号</label>
+              <input id="tpl_h1_size" type="number" value="15" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1;">
+              <label>行距</label>
+              <input id="tpl_line_spacing" type="number" step="0.1" value="1.5" />
+            </div>
+            <div style="flex:1;">
+              <label>首行缩进字符</label>
+              <input id="tpl_indent_chars" type="number" value="2" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1;"><label>页边距上(cm)</label><input id="tpl_m_top" type="number" step="0.1" value="2.5" /></div>
+            <div style="flex:1;"><label>右(cm)</label><input id="tpl_m_right" type="number" step="0.1" value="2.2" /></div>
+          </div>
+          <div class="row">
+            <div style="flex:1;"><label>下(cm)</label><input id="tpl_m_bottom" type="number" step="0.1" value="2.5" /></div>
+            <div style="flex:1;"><label>左(cm)</label><input id="tpl_m_left" type="number" step="0.1" value="2.2" /></div>
+          </div>
+
+          <div id="tplPreviewBox" class="tpl-preview tiny">点击“预览模板”查看效果</div>
+          <div class="row">
+            <button id="openDesignerBtn" type="button" class="btn2" style="flex:1;">打开模板配置中心</button>
+            <button id="saveTplBtn" type="button" style="flex:1;">保存模板</button>
+          </div>
+          <div class="tpl-preview tiny">DOCX 预览请在“模板配置中心”中进行（/template-designer）。</div>
+        </div>
+      </div>
 
       <div class="row" style="margin-top:8px;">
         <button id="exportBtn" class="btn2" style="flex:1;">导出 DOCX</button>
@@ -234,22 +205,18 @@
     </div>
   </aside>
 
-  <!-- 中栏：对话 -->
   <section class="col col-chat">
     <div class="panel-head">
       <strong>LLM 思考与响应（多轮对话）</strong>
       <span id="ctxBadge" class="badge ok">上下文充足</span>
     </div>
-
     <div id="chatLog" class="panel-body"></div>
-
     <div class="composer">
       <textarea id="chatInput" placeholder="继续追问，例如：请解释 2024-Q3 的异常波动并给出行动建议"></textarea>
       <button id="sendBtn">发送</button>
     </div>
   </section>
 
-  <!-- 右栏：Prompt + 图 -->
   <section class="col col-preview">
     <div class="panel-head"><strong>Prompt 模板 + 图像预览</strong></div>
     <div class="panel-body">
@@ -278,9 +245,7 @@
 
   marked.setOptions({ breaks: true, gfm: true });
 
-  function escapeHtml(s='') {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+  function escapeHtml(s='') { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function renderMarkdownToHtml(md='') {
     try { return marked.parse(md || ''); }
     catch { return `<p>${escapeHtml(md || '')}</p>`; }
@@ -289,18 +254,12 @@
   function createMsg(role='assistant', kind='content') {
     const d = document.createElement('div');
     d.className = 'msg ' + (role === 'user' ? 'u' : (kind === 'reasoning' ? 'r' : 'a'));
-
     const roleTag = document.createElement('div');
     roleTag.className = 'msg-role';
     roleTag.textContent = role === 'user' ? '用户' : (kind === 'reasoning' ? 'LLM 思考' : 'LLM 回复');
-
     const body = document.createElement('div');
-    body.className = 'md';
-    body.dataset.raw = '';
-
-    d.appendChild(roleTag);
-    d.appendChild(body);
-    chatLog.appendChild(d);
+    body.className = 'md'; body.dataset.raw = '';
+    d.appendChild(roleTag); d.appendChild(body); chatLog.appendChild(d);
     chatLog.scrollTop = chatLog.scrollHeight;
     return { box: d, body };
   }
@@ -326,11 +285,7 @@
 
   function slugifyKey(text) {
     if (!text) return "chart";
-    return text
-      .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .toLowerCase()
-      .slice(0, 64);
+    return text.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase().slice(0, 64);
   }
 
   function buildPlotImages(plots = []) {
@@ -342,16 +297,74 @@
     return map;
   }
 
-const payload = () => ({
-  report_type: document.getElementById('report_type').value,
-  report_style: document.getElementById('report_style').value,
-  metric: document.getElementById('metric').value,
-  granularity: document.getElementById('granularity').value,
-  start_date: document.getElementById('start_date').value || null,
-  end_date: document.getElementById('end_date').value || null,
-  top_n: Number(document.getElementById('top_n').value || 10),
-  dimensions: Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value)
-});
+  const payload = () => ({
+    report_type: document.getElementById('report_type').value,
+    report_style: document.getElementById('report_style').value,
+    metric: document.getElementById('metric').value,
+    granularity: document.getElementById('granularity').value,
+    start_date: document.getElementById('start_date').value || null,
+    end_date: document.getElementById('end_date').value || null,
+    top_n: Number(document.getElementById('top_n').value || 10),
+    dimensions: Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value)
+  });
+
+  function buildCustomTemplateConfig() {
+    return {
+      id: (document.getElementById('tpl_id').value || 'custom_user_template').trim(),
+      name: (document.getElementById('tpl_name').value || '用户自定义模板').trim(),
+      description: "用户前端少量配置生成",
+      page: {
+        size: "A4",
+        margin_cm: [
+          Number(document.getElementById('tpl_m_top').value || 2.5),
+          Number(document.getElementById('tpl_m_right').value || 2.2),
+          Number(document.getElementById('tpl_m_bottom').value || 2.5),
+          Number(document.getElementById('tpl_m_left').value || 2.2)
+        ]
+      },
+      fonts: {
+        title: { family: "微软雅黑", size_pt: 18, bold: true },
+        h1: {
+          family: document.getElementById('tpl_h1_font').value || "微软雅黑",
+          size_pt: Number(document.getElementById('tpl_h1_size').value || 15),
+          bold: true
+        },
+        h2: { family: "微软雅黑", size_pt: 13, bold: true },
+        h3: { family: "微软雅黑", size_pt: 12, bold: true },
+        h4: { family: "微软雅黑", size_pt: 11, bold: true },
+        body: {
+          family: document.getElementById('tpl_body_font').value || "宋体",
+          size_pt: Number(document.getElementById('tpl_body_size').value || 11),
+          bold: false
+        },
+        list: {
+          family: document.getElementById('tpl_body_font').value || "宋体",
+          size_pt: Number(document.getElementById('tpl_body_size').value || 11),
+          bold: false
+        }
+      },
+      paragraph_styles: {
+        title: { alignment: "center", line_spacing: 1.2, space_before_pt: 0, space_after_pt: 18, first_line_indent_chars: 0, keep_with_next: true },
+        h1: { alignment: "left", line_spacing: 1.2, space_before_pt: 18, space_after_pt: 6, first_line_indent_chars: 0, keep_with_next: true },
+        h2: { alignment: "left", line_spacing: 1.2, space_before_pt: 12, space_after_pt: 4, first_line_indent_chars: 0, keep_with_next: true },
+        body: {
+          alignment: "justify",
+          line_spacing: Number(document.getElementById('tpl_line_spacing').value || 1.5),
+          space_before_pt: 0,
+          space_after_pt: 6,
+          first_line_indent_chars: Number(document.getElementById('tpl_indent_chars').value || 2)
+        },
+        list: { alignment: "left", line_spacing: 1.3, space_before_pt: 0, space_after_pt: 4, first_line_indent_chars: 0 }
+      },
+      image: { max_width_cm: 16, alignment: "center" },
+      paragraph: {
+        line_spacing: Number(document.getElementById('tpl_line_spacing').value || 1.5),
+        space_before_pt: 4,
+        space_after_pt: 6,
+        first_line_indent_chars: Number(document.getElementById('tpl_indent_chars').value || 2)
+      }
+    };
+  }
 
   async function loadExportTemplates() {
     try {
@@ -359,22 +372,38 @@ const payload = () => ({
       if (!res.ok) throw new Error('模板接口异常');
       const j = await res.json();
       const arr = j.templates || [];
-
       exportTemplateSelect.innerHTML = '';
+
       if (!arr.length) {
         exportTemplateSelect.innerHTML = '<option value="cn_management_a4">cn_management_a4</option>';
         return;
       }
-
       arr.forEach(t => {
         const op = document.createElement('option');
         op.value = t.id;
         op.textContent = `${t.name || t.id}${t.description ? ' - ' + t.description : ''}`;
         exportTemplateSelect.appendChild(op);
       });
-    } catch (e) {
+    } catch {
       exportTemplateSelect.innerHTML = '<option value="cn_management_a4">cn_management_a4</option>';
     }
+  }
+
+  async function saveTemplate() {
+    const template_config = buildCustomTemplateConfig();
+    const res = await fetch('/api/export/template/save', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ template_config })
+    });
+    const j = await res.json();
+    if (!res.ok) {
+      alert(j.message || '保存失败');
+      return;
+    }
+    alert('模板保存成功');
+    await loadExportTemplates();
+    exportTemplateSelect.value = template_config.id;
   }
 
   async function exportDocx() {
@@ -386,16 +415,14 @@ const payload = () => ({
 
     const templateId = exportTemplateSelect.value || 'cn_management_a4';
     const reportTitle = (exportTitleInput.value || '').trim() || 'Chinook 数据分析报告';
+    const selectedDimensions = Array.from(document.querySelectorAll('input[name="dimension"]:checked')).map(x => x.value);
 
-    // ✅ 新增：当前选中的维度
-    const selectedDimensions = Array.from(
-      document.querySelectorAll('input[name="dimension"]:checked')
-    ).map(x => x.value);
+    const useCustom = document.getElementById('useCustomTpl').checked;
+    const customCfg = useCustom ? buildCustomTemplateConfig() : null;
 
     const btn = document.getElementById('exportBtn');
     const oldText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '导出中...';
+    btn.disabled = true; btn.textContent = '导出中...';
 
     try {
       const res = await fetch('/api/export/report', {
@@ -403,22 +430,18 @@ const payload = () => ({
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           report_markdown: reportMarkdown,
-          template_id: templateId,
+          template_id: useCustom ? null : templateId,
+          template_config: customCfg,
           report_title: reportTitle,
           plot_images: buildPlotImages(lastPlots),
-          // ✅ 关键参数：给后端动态维度匹配使用
           selected_dimensions: selectedDimensions
         })
       });
 
       if (!res.ok) {
         let msg = '导出失败';
-        try {
-          const j = await res.json();
-          msg = j.message || msg;
-        } catch {}
-        alert(msg);
-        return;
+        try { const j = await res.json(); msg = j.message || msg; } catch {}
+        alert(msg); return;
       }
 
       const blob = await res.blob();
@@ -428,17 +451,12 @@ const payload = () => ({
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('导出失败' + (e.message || e));
+      alert('导出失败: ' + (e.message || e));
     } finally {
-      btn.disabled = false;
-      btn.textContent = oldText;
+      btn.disabled = false; btn.textContent = oldText;
     }
   }
 
@@ -467,7 +485,6 @@ const payload = () => ({
     if (sending) return;
     sending = true;
     document.getElementById('sendBtn').disabled = true;
-
     try {
       const showReasoning = document.getElementById('showReasoning').checked;
       const res = await fetch('/api/chat/sse', {
@@ -486,10 +503,8 @@ const payload = () => ({
         return;
       }
 
-      // 先思考，再回答（不折叠）
       const reasoning = showReasoning ? createMsg('assistant', 'reasoning') : null;
       const assistant = createMsg('assistant', 'content');
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
@@ -503,10 +518,8 @@ const payload = () => ({
         while ((idx = buffer.indexOf('\n\n')) >= 0) {
           const raw = buffer.slice(0, idx);
           buffer = buffer.slice(idx + 2);
-
           const lines = raw.split('\n');
-          let ev = 'message';
-          let data = '';
+          let ev = 'message', data = '';
           for (const line of lines) {
             if (line.startsWith('event:')) ev = line.slice(6).trim();
             if (line.startsWith('data:')) data += line.slice(5).trim();
@@ -546,9 +559,7 @@ const payload = () => ({
     plots.innerHTML = '<div class="tiny">生成中...</div>';
 
     const res = await fetch('/api/generate?debug=1', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(p)
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(p)
     });
     const j = await res.json();
 
@@ -558,16 +569,12 @@ const payload = () => ({
     }
 
     const promptText = (j.finalPrompt || j.prompt || '').trim();
-
     lastPlots = j.plots || [];
     plots.innerHTML = '';
     lastPlots.forEach(item => {
-      const h = document.createElement('h4');
-      h.textContent = item.title;
-      const img = document.createElement('img');
-      img.src = 'data:image/png;base64,' + item.image;
-      plots.appendChild(h);
-      plots.appendChild(img);
+      const h = document.createElement('h4'); h.textContent = item.title;
+      const img = document.createElement('img'); img.src = 'data:image/png;base64,' + item.image;
+      plots.appendChild(h); plots.appendChild(img);
     });
 
     if (!promptText) {
@@ -577,12 +584,8 @@ const payload = () => ({
       return;
     }
 
-    // 先注入上下文
     messages.push({ role:'user', content: promptText });
-
-    // 再从“实际发送内容”回显到右侧，保证一致
-    const sentPrompt = messages[messages.length - 1]?.content || '';
-    promptBox.textContent = sentPrompt;
+    promptBox.textContent = messages[messages.length - 1]?.content || '';
 
     const { body } = createMsg('assistant', 'content');
     appendMsgMarkdown(body, '已基于当前筛选生成 Prompt，并发送给模型。你可以继续多轮追问。');
@@ -606,12 +609,19 @@ const payload = () => ({
     chatLog.innerHTML = '';
     promptBox.textContent = '尚未生成 Prompt';
     plots.innerHTML = '<div class="tiny">尚未生成图表</div>';
-
     const { body } = createMsg('assistant', 'content');
     appendMsgMarkdown(body, '已新建会话。你可以点击“生成并开始对话”。');
     await refreshCtxThrottled(true);
   });
 
+  document.getElementById('useCustomTpl').addEventListener('change', (e) => {
+    document.getElementById('customTplForm').style.display = e.target.checked ? 'block' : 'none';
+  });
+
+  document.getElementById('openDesignerBtn').addEventListener('click', () => {
+    window.open('/template-designer', '_blank');
+  });
+  document.getElementById('saveTplBtn').addEventListener('click', saveTemplate);
   document.getElementById('exportBtn').addEventListener('click', exportDocx);
 
   document.getElementById('chatInput').addEventListener('input', () => {
@@ -619,10 +629,9 @@ const payload = () => ({
     ctxCheckTimer = setTimeout(() => refreshCtxThrottled(false), 800);
   });
 
-  // 初始化
   {
     const { body } = createMsg('assistant', 'content');
-    appendMsgMarkdown(body, '欢迎使用：左侧配置后生成报告。\n\n- 中栏展示 **先思考、后输出**\n- 左栏可直接选择模板导出 DOCX\n- 右栏展示 **Prompt 与图像**');
+    appendMsgMarkdown(body, '欢迎使用：左侧配置后生成报告。\n\n- 中栏展示 **先思考、后输出**\n- 左栏可选择模板或少量自定义后导出 DOCX\n- 右栏展示 **Prompt 与图像**');
   }
 
   loadExportTemplates();

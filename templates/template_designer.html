@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模板配置中心</title>
+  <style>
+    :root{
+      --bg:#f6f8fb; --panel:#fff; --line:#e5e7eb; --text:#111827; --muted:#6b7280;
+      --brand:#2563eb; --ok:#166534; --err:#991b1b;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .layout{display:grid;grid-template-columns:420px 1fr;height:100vh}
+    .left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:12px}
+    .right{padding:12px;overflow:auto}
+    .card{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fbfdff}
+    .row{display:flex;gap:8px}.row>*{flex:1}
+    h3{margin:0 0 8px 0}
+    label{display:block;margin-top:6px;font-size:13px}
+    input,textarea,select,button{
+      width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;background:#fff
+    }
+    textarea{min-height:130px;resize:vertical}
+    button{border:none;background:var(--brand);color:#fff;cursor:pointer;height:36px}
+    button.secondary{background:#4b5563}
+    button:disabled{opacity:.65;cursor:not-allowed}
+    .tiny{font-size:12px;color:var(--muted)}
+    .status{margin-top:8px;font-size:12px}
+    .status.ok{color:var(--ok)}
+    .status.err{color:var(--err)}
+    #docxPreview{
+      background:#fff;border:1px solid var(--line);border-radius:10px;
+      padding:12px;min-height:700px;overflow:auto;
+    }
+    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .toolbar .leftx{display:flex;gap:8px;align-items:center}
+    .dot{width:8px;height:8px;border-radius:999px;background:#9ca3af;display:inline-block}
+    .dot.live{background:#16a34a}
+    .msg{
+      margin-top:8px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff
+    }
+    @media (max-width: 1100px){
+      .layout{grid-template-columns:1fr}
+      .left{border-right:none;border-bottom:1px solid var(--line)}
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="left">
+    <h3>模板配置中心</h3>
+    <div class="tiny">修改配置后可实时预览 DOCX 渲染效果（docx-preview）</div>
+
+    <div class="card">
+      <label>模板ID</label>
+      <input id="tpl_id" value="my_tpl" />
+
+      <label>模板名称</label>
+      <input id="tpl_name" value="我的模板" />
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>正文字体</label>
+          <input id="body_font" value="宋体" />
+        </div>
+        <div>
+          <label>正文字号</label>
+          <input id="body_size" type="number" value="11" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>H1 字体</label>
+          <input id="h1_font" value="微软雅黑" />
+        </div>
+        <div>
+          <label>H1 字号</label>
+          <input id="h1_size" type="number" value="15" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>行距</label>
+          <input id="line_spacing" type="number" step="0.1" value="1.5" />
+        </div>
+        <div>
+          <label>首行缩进字符</label>
+          <input id="indent_chars" type="number" value="2" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>上边距(cm)</label>
+          <input id="m_top" type="number" step="0.1" value="2.5" />
+        </div>
+        <div>
+          <label>右边距(cm)</label>
+          <input id="m_right" type="number" step="0.1" value="2.2" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>下边距(cm)</label>
+          <input id="m_bottom" type="number" step="0.1" value="2.5" />
+        </div>
+        <div>
+          <label>左边距(cm)</label>
+          <input id="m_left" type="number" step="0.1" value="2.2" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>预览内容 (Markdown)</label>
+      <textarea id="preview_md"># 2026Q1 销售分析报告
+
+## 概览
+本季度销售额同比增长 **12.8%**。
+
+## 维度关键发现
+- 艺术家维度贡献最高
+- 国家维度北美增长明显
+
+## 建议
+1. 深耕高增长区域
+2. 对低增长客户做分层运营</textarea>
+
+      <div class="row" style="margin-top:8px;">
+        <button id="btnPreview">立即预览</button>
+        <button id="btnSave" class="secondary">保存模板</button>
+      </div>
+
+      <label style="margin-top:8px;">
+        <input id="autoPreview" type="checkbox" checked style="width:auto;margin-right:6px;" />
+        自动预览（停止输入后 600ms）
+      </label>
+
+      <div id="status" class="status"></div>
+    </div>
+  </aside>
+
+  <main class="right">
+    <div class="toolbar">
+      <div class="leftx">
+        <span id="liveDot" class="dot"></span>
+        <span class="tiny">DOCX 预览区</span>
+      </div>
+      <div class="tiny" id="metaInfo">等待预览...</div>
+    </div>
+
+    <div id="docxPreview"></div>
+    <div id="errorBox" class="msg tiny" style="display:none;"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
+<script src="https://unpkg.com/docx-preview@0.3.2/dist/docx-preview.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+  const metaEl = $("metaInfo");
+  const errEl = $("errorBox");
+  const liveDot = $("liveDot");
+  const previewEl = $("docxPreview");
+
+  let previewTimer = null;
+  let requestSeq = 0;
+  let latestRenderedSeq = 0;
+
+  function setStatus(msg, ok=true){
+    statusEl.className = "status " + (ok ? "ok" : "err");
+    statusEl.textContent = msg || "";
+  }
+
+  function setError(msg){
+    if (!msg){
+      errEl.style.display = "none";
+      errEl.textContent = "";
+      return;
+    }
+    errEl.style.display = "block";
+    errEl.textContent = msg;
+  }
+
+  function cfg(){
+    return {
+      id: $("tpl_id").value.trim() || "my_tpl",
+      name: $("tpl_name").value.trim() || "我的模板",
+      description: "用户配置模板",
+      page: {
+        size: "A4",
+        margin_cm: [
+          Number($("m_top").value || 2.5),
+          Number($("m_right").value || 2.2),
+          Number($("m_bottom").value || 2.5),
+          Number($("m_left").value || 2.2)
+        ]
+      },
+      fonts: {
+        title:{family:"微软雅黑",size_pt:18,bold:true},
+        h1:{family:$("h1_font").value || "微软雅黑",size_pt:Number($("h1_size").value || 15),bold:true},
+        h2:{family:"微软雅黑",size_pt:13,bold:true},
+        h3:{family:"微软雅黑",size_pt:12,bold:true},
+        h4:{family:"微软雅黑",size_pt:11,bold:true},
+        body:{family:$("body_font").value || "宋体",size_pt:Number($("body_size").value || 11),bold:false},
+        list:{family:$("body_font").value || "宋体",size_pt:Number($("body_size").value || 11),bold:false}
+      },
+      paragraph_styles: {
+        title:{alignment:"center",line_spacing:1.2,space_before_pt:0,space_after_pt:18,first_line_indent_chars:0},
+        h1:{alignment:"left",line_spacing:1.2,space_before_pt:18,space_after_pt:6,first_line_indent_chars:0},
+        h2:{alignment:"left",line_spacing:1.2,space_before_pt:12,space_after_pt:4,first_line_indent_chars:0},
+        body:{
+          alignment:"justify",
+          line_spacing:Number($("line_spacing").value || 1.5),
+          space_before_pt:0,
+          space_after_pt:6,
+          first_line_indent_chars:Number($("indent_chars").value || 2)
+        },
+        list:{alignment:"left",line_spacing:1.3,space_before_pt:0,space_after_pt:4,first_line_indent_chars:0}
+      },
+      image:{max_width_cm:16,alignment:"center"},
+      paragraph:{
+        line_spacing:Number($("line_spacing").value || 1.5),
+        space_before_pt:4,
+        space_after_pt:6,
+        first_line_indent_chars:Number($("indent_chars").value || 2)
+      }
+    };
+  }
+
+  async function previewDocx() {
+    const seq = ++requestSeq;
+    setError("");
+    setStatus("正在生成预览...");
+    metaEl.textContent = "请求后端生成 DOCX...";
+    liveDot.classList.remove("live");
+
+    try {
+      if (typeof docx === "undefined" || !docx.renderAsync) {
+        throw new Error("docx-preview 未加载成功（docx.renderAsync 不可用）");
+      }
+
+      const res = await fetch("/api/export/template/preview-docx", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          template_config: cfg(),
+          report_title: "模板预览",
+          report_markdown: $("preview_md").value || "# 模板预览\n\n这是一段正文预览。"
+        })
+      });
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || ("HTTP " + res.status));
+      }
+
+      const arr = await res.arrayBuffer();
+
+      // 只渲染最后一次请求结果，避免并发乱序
+      if (seq < requestSeq) return;
+
+      previewEl.innerHTML = "";
+      await docx.renderAsync(arr, previewEl, null, {
+        className: "docx",
+        inWrapper: true,
+        breakPages: true,
+        ignoreWidth: false,
+        ignoreHeight: false,
+        ignoreFonts: false
+      });
+
+      latestRenderedSeq = seq;
+      liveDot.classList.add("live");
+      const kb = (arr.byteLength / 1024).toFixed(1);
+      metaEl.textContent = `预览已更新 · ${kb} KB`;
+      setStatus("预览成功");
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setStatus("预览失败", false);
+      setError("预览失败： " + msg);
+      metaEl.textContent = "预览失败";
+      console.error(e);
+    }
+  }
+
+  async function saveTpl(){
+    setStatus("正在保存模板...");
+    setError("");
+    try {
+      const res = await fetch("/api/export/template/save", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ template_config: cfg() })
+      });
+      const j = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(j.message || ("HTTP " + res.status));
+      setStatus("模板已保存");
+      alert("模板已保存");
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setStatus("保存失败", false);
+      setError("保存失败： " + msg);
+    }
+  }
+
+  function schedulePreview(){
+    if (!$("autoPreview").checked) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => previewDocx(), 600);
+  }
+
+  // 事件绑定
+  $("btnPreview").addEventListener("click", previewDocx);
+  $("btnSave").addEventListener("click", saveTpl);
+
+  [
+    "tpl_id","tpl_name","body_font","body_size","h1_font","h1_size",
+    "line_spacing","indent_chars","m_top","m_right","m_bottom","m_left","preview_md"
+  ].forEach(id => {
+    $(id).addEventListener("input", schedulePreview);
+    $(id).addEventListener("change", schedulePreview);
+  });
+
+  $("autoPreview").addEventListener("change", () => {
+    if ($("autoPreview").checked) schedulePreview();
+  });
+
+  // 首次预览
+  previewDocx();
+})();
+</script>
+</body>
+</html>

@@ -299,6 +299,15 @@
     return map;
   }
 
+  function buildPlotImagesMeta(plots = []) {
+    const map = {};
+    plots.forEach(p => {
+      const key = slugifyKey(p.title);
+      if (p.image && p.meta) map[key] = p.meta;
+    });
+    return map;
+  }
+
   const payload = () => ({
     report_type: document.getElementById('report_type').value,
     report_style: document.getElementById('report_style').value,
@@ -456,6 +465,7 @@
           template_config: customCfg,
           report_title: reportTitle,
           plot_images: buildPlotImages(lastPlots),
+          plot_images_meta: buildPlotImagesMeta(lastPlots),
           selected_dimensions: selectedDimensions
         })
       });

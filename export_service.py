@@ -530,7 +530,7 @@ def _strip_heading_prefix(text: str) -> str:
         r'^[一二三四五六七八九十]+、',
         r'^第[一二三四五六七八九十]+部分',
         r'^第[一二三四五六七八九十]+章',
-        r'^\([一二��四五六七八九十]+\)',
+        r'^\([一二三四五六七八九十]+\)',
         r'^（[一二三四五六七八九十]+）',
         r'^\d+\.',
         r'^\d+、',
@@ -608,7 +608,13 @@ def _build_dimension_maps(
 
 def _find_main_sections(headings: List[Dict[str, Any]], total_lines: int) -> Dict[str, Dict[str, Any]]:
     def _is_overview_title(norm: str) -> bool:
-        keywords = ["概览", "总览", "概况", "总体", "整体"]
+        keywords = [
+            "概览", "总览", "概况", "总体", "整体",
+            "摘要", "执行摘要", "综述", "概述",
+            "整体表现", "总体表现", "整体情况", "总体情况",
+            "销售概览", "数据概览", "业绩概览", "整体销售",
+            "总量", "汇总", "全局", "宏观",
+        ]
         return any(k in norm for k in keywords)
 
     def _is_findings_title(norm: str) -> bool:
@@ -749,14 +755,25 @@ def _group_keys_by_meta(
 
     meta_map = image_meta or {}
 
+    # 总量/概览类关键字，用于 key 名称 fallback 识别
+    _OVERVIEW_KEY_KEYWORDS = {"total", "总量", "总体", "概览", "overview"}
+
     for k in keys:
         meta = meta_map.get(k) or {}
         scope = str(meta.get("scope") or "").strip().lower()
         dim = str(meta.get("dimension_key") or "").strip().lower()
 
+        # 优先用 meta 判断
         if scope == "overview" or dim == "total":
             overview_keys.append(k)
             continue
+
+        # meta 为空时，fallback：从 key 名称推断是否为总量图
+        if not scope and not dim:
+            k_lower = k.lower()
+            if any(kw in k_lower for kw in _OVERVIEW_KEY_KEYWORDS):
+                overview_keys.append(k)
+                continue
 
         if dim:
             dim_groups.setdefault(dim, []).append(k)
@@ -769,7 +786,6 @@ def _group_keys_by_meta(
             remain_keys.append(k)
 
     return overview_keys, dim_groups, remain_keys
-
 
 def inject_placeholders_by_sections(
     markdown_text: str,
@@ -851,8 +867,19 @@ def inject_placeholders_by_sections(
         for k in overview_keys:
             inserts.append((anchor, k, f"{{{{image:{k}}}}}", "overview"))
             placed.add(k)
-    else:
-        remain_keys.extend(overview_keys)
+    elif overview_keys:
+        # fallback：找不到概览章节时，插到第一个一级标题之后
+        first_h1 = next((h for h in headings if h["level"] == 1), None)
+        if first_h1:
+            anchor = first_h1["line_index"]
+            for k in overview_keys:
+                inserts.append((anchor, k, f"{{{{image:{k}}}}}", "overview_fallback"))
+                placed.add(k)
+        else:
+            # 文档没有任何标题，插到文档开头
+            for k in overview_keys:
+                inserts.append((0, k, f"{{{{image:{k}}}}}", "overview_fallback_top"))
+                placed.add(k)
 
     for dim, ks in dim_groups.items():
         sec = dim_sections.get(dim)

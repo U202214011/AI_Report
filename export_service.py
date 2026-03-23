@@ -18,18 +18,15 @@ from schema_config import get_dimension_alias_map, get_dimension_title_map
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "export_templates")
 
-# ---- markdown block parse ----
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)$')
 _UL_RE = re.compile(r'^\s*[-*]\s+(.*)$')
 _OL_RE = re.compile(r'^\s*(\d+)\.\s+(.*)$')
 _CODE_FENCE_RE = re.compile(r'^\s*```([a-zA-Z0-9_\-]*)\s*$')
 
-# ---- inline markdown ----
 _BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
 _ITALIC_RE = re.compile(r'\*(.+?)\*')
 _UNDERLINE_RE = re.compile(r'__(.+?)__')
 
-# ---- image placeholder ----
 _IMAGE_PLACEHOLDER_FULL_RE = re.compile(
     r'^\s*\{\{image:([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\}\}\s*$'
 )
@@ -54,14 +51,7 @@ def _pt(v: float) -> Pt:
     return Pt(float(v))
 
 
-# ---------------------------
-# 基础：Word field / tab / paragraph helpers
-# ---------------------------
-
 def _add_field_run(paragraph, field_name: str):
-    """
-    在段落中插入 Word 域（如 PAGE / NUMPAGES）
-    """
     run = paragraph.add_run()
     fld_char_begin = OxmlElement('w:fldChar')
     fld_char_begin.set(qn('w:fldCharType'), 'begin')
@@ -80,17 +70,10 @@ def _add_field_run(paragraph, field_name: str):
     r.append(fld_char_begin)
     r.append(instr_text)
     r.append(fld_char_separate)
-    # Word 打开文档后会计算显示值
     r.append(fld_char_end)
 
 
 def _add_tab_stops(pf, tab_stops: List[Dict[str, Any]]):
-    """
-    tab_stops:
-    [
-      {"pos_cm": 8.0, "align":"left|center|right|decimal", "leader":"none|dot|hyphen|underscore"}
-    ]
-    """
     align_map = {
         "left": WD_TAB_ALIGNMENT.LEFT,
         "center": WD_TAB_ALIGNMENT.CENTER,
@@ -151,11 +134,9 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any], base_font_size: flo
     pf.space_before = _pt(before)
     pf.space_after = _pt(after)
 
-    # line_spacing 可为数值倍率或固定点值
     if isinstance(line_spacing, (int, float)):
         pf.line_spacing = float(line_spacing)
     elif isinstance(line_spacing, dict):
-        # {"type":"exactly|at_least|multiple","value":18}
         tp = str(line_spacing.get("type", "multiple")).lower()
         val = float(line_spacing.get("value", 1.5))
         if tp == "exactly":
@@ -172,13 +153,11 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any], base_font_size: flo
     if indent_chars > 0:
         pf.first_line_indent = _pt(indent_chars * base_font_size)
 
-    # 新增：左右缩进
     if p_cfg.get("left_indent_cm") is not None:
         pf.left_indent = _cm(float(p_cfg["left_indent_cm"]))
     if p_cfg.get("right_indent_cm") is not None:
         pf.right_indent = _cm(float(p_cfg["right_indent_cm"]))
 
-    # 新增：悬挂缩进（列表常用）
     if p_cfg.get("hanging_indent_cm") is not None:
         pf.first_line_indent = _cm(-abs(float(p_cfg["hanging_indent_cm"])))
 
@@ -186,7 +165,6 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any], base_font_size: flo
     if alignment and alignment in _ALIGNMENT_MAP:
         pf.alignment = _ALIGNMENT_MAP[alignment]
 
-    # 分页与版式控制
     if p_cfg.get("keep_with_next") is not None:
         pf.keep_with_next = bool(p_cfg.get("keep_with_next"))
     if p_cfg.get("keep_together") is not None:
@@ -196,10 +174,8 @@ def _apply_paragraph_style(paragraph, p_cfg: Dict[str, Any], base_font_size: flo
     if p_cfg.get("widow_control") is not None:
         pf.widow_control = bool(p_cfg.get("widow_control"))
 
-    # tab stops
     if isinstance(p_cfg.get("tab_stops"), list):
         _add_tab_stops(pf, p_cfg.get("tab_stops") or [])
-
 
 
 def _split_inline_markdown(text: str) -> List[Tuple[str, bool, bool, bool]]:
@@ -288,15 +264,10 @@ def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str,
 
 
 def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
-    """
-    返回 [(type, text, level)]
-    type: heading|ul|ol|p|blank|code|table_row
-    """
     lines = (md_text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     blocks: List[Tuple[str, str, int]] = []
 
     in_code = False
-    code_lang = ""
     code_buf: List[str] = []
 
     i = 0
@@ -304,17 +275,14 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
         raw = lines[i]
         line = raw.strip()
 
-        # code fence
         fm = _CODE_FENCE_RE.match(raw)
         if fm:
             if not in_code:
                 in_code = True
-                code_lang = fm.group(1) or ""
                 code_buf = []
             else:
                 in_code = False
                 blocks.append(("code", "\n".join(code_buf), 0))
-                code_lang = ""
                 code_buf = []
             i += 1
             continue
@@ -337,7 +305,6 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
             i += 1
             continue
 
-        # markdown table row
         if "|" in raw and raw.strip().startswith("|") and raw.strip().endswith("|"):
             blocks.append(("table_row", raw.strip(), 0))
             i += 1
@@ -351,7 +318,6 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
 
         om = _OL_RE.match(raw)
         if om:
-            # group(2) 为正文；保留原序号文本给需要时使用
             blocks.append(("ol", om.group(2).strip(), int(om.group(1))))
             i += 1
             continue
@@ -359,7 +325,6 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
         blocks.append(("p", raw.strip(), 0))
         i += 1
 
-    # 未闭合 code fence 兜底
     if in_code and code_buf:
         blocks.append(("code", "\n".join(code_buf), 0))
 
@@ -367,28 +332,22 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
 
 
 def _set_page_size(section, page_size: str):
-    """
-    支持 A4 / Letter，默认 A4
-    """
     ps = str(page_size or "A4").lower()
     if ps == "letter":
         section.page_width = Inches(8.5)
         section.page_height = Inches(11)
     else:
-        # A4
         section.page_width = Cm(21.0)
         section.page_height = Cm(29.7)
 
 
 def _set_page_layout(doc: Document, cfg: Dict[str, Any]):
     page = cfg.get("page", {})
-    margins = page.get("margin_cm", [2.5, 2.2, 2.5, 2.2])  # top,right,bottom,left
+    margins = page.get("margin_cm", [2.5, 2.2, 2.5, 2.2])
     if len(margins) != 4:
         margins = [2.5, 2.2, 2.5, 2.2]
 
     sec = doc.sections[0]
-
-    # size + orientation
     _set_page_size(sec, page.get("size", "A4"))
     orientation = str(page.get("orientation", "portrait")).lower()
     if orientation == "landscape":
@@ -400,13 +359,11 @@ def _set_page_layout(doc: Document, cfg: Dict[str, Any]):
     sec.bottom_margin = _cm(margins[2])
     sec.left_margin = _cm(margins[3])
 
-    # header/footer 距离
     if page.get("header_distance_cm") is not None:
         sec.header_distance = _cm(float(page["header_distance_cm"]))
     if page.get("footer_distance_cm") is not None:
         sec.footer_distance = _cm(float(page["footer_distance_cm"]))
 
-    # mirror margins
     if page.get("mirror_margins") is not None:
         sec.gutter = _cm(float(page.get("gutter_cm", 0.0))) if bool(page["mirror_margins"]) else _cm(0.0)
 
@@ -420,7 +377,6 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
     fonts = cfg.get("fonts", {})
     body_font = fonts.get("body", {"family": "宋体", "size_pt": 10, "bold": False})
 
-    # header
     header_cfg = hf.get("header", {})
     if header_cfg.get("text"):
         p = sec.header.paragraphs[0] if sec.header.paragraphs else sec.header.add_paragraph()
@@ -428,7 +384,6 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
         run = p.add_run(str(header_cfg["text"]))
         _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
 
-    # footer
     footer_cfg = hf.get("footer", {})
     if footer_cfg.get("show_page_number"):
         p = sec.footer.paragraphs[0] if sec.footer.paragraphs else sec.footer.add_paragraph()
@@ -441,7 +396,6 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
 
         r1 = p.add_run(prefix)
         _set_run_font(r1, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
-
         _add_field_run(p, "PAGE")
 
         if total_format:
@@ -451,7 +405,6 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
 
         r3 = p.add_run(suffix)
         _set_run_font(r3, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
-
         p.paragraph_format.alignment = _ALIGNMENT_MAP.get(align, WD_ALIGN_PARAGRAPH.CENTER)
     elif footer_cfg.get("text"):
         p = sec.footer.paragraphs[0] if sec.footer.paragraphs else sec.footer.add_paragraph()
@@ -482,19 +435,16 @@ def _add_image_block(doc: Document, image_bytes: bytes, cfg: Dict[str, Any], cap
     run.add_picture(BytesIO(image_bytes), width=_cm(width_cm))
     p.paragraph_format.alignment = _ALIGNMENT_MAP.get(align, WD_ALIGN_PARAGRAPH.CENTER)
 
-    # 图片段落控制
     p_cfg = img_cfg.get("paragraph", {})
     if p_cfg:
         _apply_paragraph_style(p, p_cfg, base_font_size=11)
 
-    # caption
     if caption:
         cap_style_key = img_cfg.get("caption_style", "caption")
         _add_text_paragraph(doc, caption, cap_style_key, cfg)
 
 
 def _parse_table_row(line: str) -> List[str]:
-    # | a | b | c |
     t = line.strip()
     if t.startswith("|"):
         t = t[1:]
@@ -504,7 +454,6 @@ def _parse_table_row(line: str) -> List[str]:
 
 
 def _is_table_separator_row(cells: List[str]) -> bool:
-    # 例如 --- | :---: | ---:
     for c in cells:
         cc = c.replace(":", "").replace("-", "").strip()
         if cc != "":
@@ -536,9 +485,6 @@ def _add_markdown_table(doc: Document, rows: List[List[str]], cfg: Dict[str, Any
                 _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
 
 
-# ---------------------------
-# 你原有的“按章节注入图片占位符”逻辑（保持）
-# ---------------------------
 _HEADING_LINE_RE = re.compile(r'^(#{1,6})\s+(.*?)\s*$')
 
 
@@ -684,9 +630,65 @@ def _infer_dim_from_key(key: str, dim_alias_map: Dict[str, List[str]]) -> Option
     return None
 
 
+def _normalize_chart_kind(kind: str) -> str:
+    k = str(kind or "").strip().lower()
+    if k in ("bar", "column", "histogram", "柱状图", "柱状"):
+        return "bar"
+    if k in ("line", "trend", "折线图", "折线", "趋势"):
+        return "line"
+    if k in ("pie", "饼图", "饼"):
+        return "pie"
+    return k or "chart"
+
+
+def _chart_rank_for_kind(kind: str) -> int:
+    k = _normalize_chart_kind(kind)
+    if k == "bar":
+        return 1
+    if k == "line":
+        return 2
+    if k == "pie":
+        return 3
+    return 9
+
+
+def _group_keys_by_meta(
+    keys: List[str],
+    image_meta: Dict[str, Any] | None,
+    dim_alias_map: Dict[str, List[str]]
+) -> Tuple[List[str], Dict[str, List[str]], List[str]]:
+    overview_keys: List[str] = []
+    dim_groups: Dict[str, List[str]] = {}
+    remain_keys: List[str] = []
+
+    meta_map = image_meta or {}
+
+    for k in keys:
+        meta = meta_map.get(k) or {}
+        scope = str(meta.get("scope") or "").strip().lower()
+        dim = str(meta.get("dimension_key") or "").strip().lower()
+
+        if scope == "overview" or dim == "total":
+            overview_keys.append(k)
+            continue
+
+        if dim:
+            dim_groups.setdefault(dim, []).append(k)
+            continue
+
+        inferred = _infer_dim_from_key(k, dim_alias_map)
+        if inferred:
+            dim_groups.setdefault(inferred, []).append(k)
+        else:
+            remain_keys.append(k)
+
+    return overview_keys, dim_groups, remain_keys
+
+
 def inject_placeholders_by_sections(
     markdown_text: str,
     images: Dict[str, str] | None,
+    image_meta: Dict[str, Any] | None = None,
     selected_dimensions: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[str, Dict[str, Any]]:
     debug: Dict[str, Any] = {
@@ -697,7 +699,8 @@ def inject_placeholders_by_sections(
         "unmatched_to_appendix": [],
         "input_image_keys": [],
         "final_image_keys": [],
-        "selected_dimensions": selected_dimensions or []
+        "selected_dimensions": selected_dimensions or [],
+        "image_meta_keys": sorted(list((image_meta or {}).keys()))
     }
 
     if not markdown_text:
@@ -737,23 +740,22 @@ def inject_placeholders_by_sections(
         )
     debug["dimension_sections"] = dim_sections
 
-    overview_keys: List[str] = []
-    dim_groups: Dict[str, List[str]] = {}
-    remain_keys: List[str] = []
+    overview_keys, dim_groups, remain_keys = _group_keys_by_meta(
+        keys=keys,
+        image_meta=image_meta,
+        dim_alias_map=dim_alias_map
+    )
 
-    for k in keys:
-        if _is_overview_chart_key(k):
-            overview_keys.append(k)
-            continue
-        dim = _infer_dim_from_key(k, dim_alias_map)
-        if dim:
-            dim_groups.setdefault(dim, []).append(k)
-        else:
-            remain_keys.append(k)
+    def _sort_key(x: str):
+        meta = (image_meta or {}).get(x) or {}
+        chart_kind = meta.get("chart_kind")
+        if chart_kind:
+            return (_chart_rank_for_kind(chart_kind), x)
+        return (_chart_rank_for_insert(x), x)
 
-    overview_keys = sorted(overview_keys, key=lambda x: (_chart_rank_for_insert(x), x))
+    overview_keys = sorted(overview_keys, key=_sort_key)
     for d in list(dim_groups.keys()):
-        dim_groups[d] = sorted(dim_groups[d], key=lambda x: (_chart_rank_for_insert(x), x))
+        dim_groups[d] = sorted(dim_groups[d], key=_sort_key)
 
     inserts: List[Tuple[int, str, str, str]] = []
     placed: Set[str] = set()
@@ -796,7 +798,15 @@ def inject_placeholders_by_sections(
         lines.append("")
         lines.append("# 附录：图表")
         appendix_header_line = len(lines)
-        for k in sorted(true_remain, key=lambda x: (_chart_rank_for_insert(x), x)):
+
+        def _appendix_sort_key(x: str):
+            meta = (image_meta or {}).get(x) or {}
+            chart_kind = meta.get("chart_kind")
+            if chart_kind:
+                return (_chart_rank_for_kind(chart_kind), x)
+            return (_chart_rank_for_insert(x), x)
+
+        for k in sorted(true_remain, key=_appendix_sort_key):
             lines.append("")
             lines.append(f"{{{{image:{k}}}}}")
             lines.append("")
@@ -811,14 +821,11 @@ def inject_placeholders_by_sections(
     return "\n".join(lines), debug
 
 
-# 新增：用户模板目录（可选）
 USER_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "user")
 os.makedirs(USER_TEMPLATE_DIR, exist_ok=True)
 
+
 def list_export_templates() -> List[Dict[str, Any]]:
-    """
-    读取内置模板 + 用户模板
-    """
     out: List[Dict[str, Any]] = []
 
     def scan_dir(dir_path: str, is_user: bool = False):
@@ -827,13 +834,13 @@ def list_export_templates() -> List[Dict[str, Any]]:
         for fn in os.listdir(dir_path):
             if not fn.endswith(".json"):
                 continue
-            file_id = os.path.splitext(fn)[0]  # 始终用文件名作为 id
+            file_id = os.path.splitext(fn)[0]
             path = os.path.join(dir_path, fn)
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                 out.append({
-                    "id": file_id,  # 关键：使用文件名作为 id
+                    "id": file_id,
                     "name": cfg.get("name") or file_id,
                     "description": cfg.get("description", ""),
                     "file": fn,
@@ -845,7 +852,6 @@ def list_export_templates() -> List[Dict[str, Any]]:
     scan_dir(TEMPLATE_DIR, is_user=False)
     scan_dir(USER_TEMPLATE_DIR, is_user=True)
 
-    # 去重（用户模板覆盖同名内置），保留 is_user 标记
     m: Dict[str, Any] = {}
     for x in out:
         m[x["id"]] = x
@@ -856,13 +862,11 @@ def load_template_config(template_id: str | None) -> Dict[str, Any]:
     if not template_id:
         template_id = "cn_management_a4"
 
-    # 1) 用户模板优先
     user_path = os.path.join(USER_TEMPLATE_DIR, f"{template_id}.json")
     if os.path.exists(user_path):
         with open(user_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    # 2) 内置模板
     path = os.path.join(TEMPLATE_DIR, f"{template_id}.json")
     if not os.path.exists(path):
         path = os.path.join(TEMPLATE_DIR, "cn_management_a4.json")
@@ -888,7 +892,6 @@ def save_user_template_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def delete_user_template_config(template_id: str) -> None:
-    """删除用户模板，只能删除 USER_TEMPLATE_DIR 中的模板"""
     safe_id = re.sub(r"[^a-zA-Z0-9_\-]+", "_", (template_id or "").strip())
     if not safe_id:
         raise ValueError("template_id 不能为空")
@@ -897,9 +900,6 @@ def delete_user_template_config(template_id: str) -> None:
         raise FileNotFoundError(f"用户模板 '{safe_id}' 不存在")
     os.remove(path)
 
-# ---------------------------
-# markdown -> docx（增强版）
-# ---------------------------
 
 def render_markdown_to_docx_bytes(
     markdown_text: str,
@@ -908,10 +908,6 @@ def render_markdown_to_docx_bytes(
     images: Dict[str, str] | None = None,
     image_captions: Dict[str, str] | None = None
 ) -> bytes:
-    """
-    images: {key: base64}
-    image_captions: {key: "图1 ..."} 可选
-    """
     doc = Document()
     _set_page_layout(doc, template_cfg)
     _apply_header_footer(doc, template_cfg)
@@ -921,7 +917,6 @@ def render_markdown_to_docx_bytes(
 
     blocks = _parse_markdown_lines(markdown_text)
 
-    # 聚合 table rows
     i = 0
     while i < len(blocks):
         typ, text, lv = blocks[i]
@@ -937,7 +932,6 @@ def render_markdown_to_docx_bytes(
                 raw_rows.append(_parse_table_row(blocks[i][1]))
                 i += 1
 
-            # 去掉第二行分隔线
             if len(raw_rows) >= 2 and _is_table_separator_row(raw_rows[1]):
                 table_rows = [raw_rows[0]] + raw_rows[2:]
             else:
@@ -947,7 +941,6 @@ def render_markdown_to_docx_bytes(
             continue
 
         if typ == "code":
-            # 代码块样式（可在模板 fonts.code + paragraph_styles.code 调整）
             lines = text.split("\n")
             for line in lines:
                 _add_text_paragraph(doc, line, "code", template_cfg)
@@ -1014,7 +1007,6 @@ def render_markdown_to_docx_bytes(
             continue
 
         if typ == "ul":
-            # 优先使用 Word 内置列表样式；没有则回退手动圆点
             try:
                 p = doc.add_paragraph(style="List Bullet")
                 p_cfg = _get_para_cfg("list", template_cfg)
@@ -1024,9 +1016,15 @@ def render_markdown_to_docx_bytes(
                     if not seg:
                         continue
                     run = p.add_run(seg)
-                    _set_run_font(run, font_cfg.get("family", "宋体"), float(font_cfg.get("size_pt", 11)),
-                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline,
-                                  color=font_cfg.get("color"))
+                    _set_run_font(
+                        run,
+                        font_cfg.get("family", "宋体"),
+                        float(font_cfg.get("size_pt", 11)),
+                        bold=is_bold or bool(font_cfg.get("bold", False)),
+                        italic=is_italic,
+                        underline=is_underline,
+                        color=font_cfg.get("color")
+                    )
             except KeyError:
                 _add_text_paragraph(doc, f"{_BULLET_CHAR} {text}", "list", template_cfg)
             i += 1
@@ -1042,22 +1040,26 @@ def render_markdown_to_docx_bytes(
                     if not seg:
                         continue
                     run = p.add_run(seg)
-                    _set_run_font(run, font_cfg.get("family", "宋体"), float(font_cfg.get("size_pt", 11)),
-                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline,
-                                  color=font_cfg.get("color"))
+                    _set_run_font(
+                        run,
+                        font_cfg.get("family", "宋体"),
+                        float(font_cfg.get("size_pt", 11)),
+                        bold=is_bold or bool(font_cfg.get("bold", False)),
+                        italic=is_italic,
+                        underline=is_underline,
+                        color=font_cfg.get("color")
+                    )
             except KeyError:
                 _add_text_paragraph(doc, text, "list", template_cfg)
             i += 1
             continue
 
-        # fallback
         _add_text_paragraph(doc, text, "body", template_cfg)
         i += 1
 
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
-
 
 
 def build_export_filename(prefix: str = "报告", ext: str = "docx") -> str:

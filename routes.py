@@ -32,11 +32,16 @@ from export_service import (
     save_user_template_config,
     delete_user_template_config,
 )
-from schema_config import get_metric_label_map, build_selected_dimensions
+from schema_config import (
+    get_metric_label_map,
+    build_selected_dimensions,
+    get_dimension_title_map
+)
 
 logger = logging.getLogger(__name__)
 
 METRIC_LABELS = get_metric_label_map()
+DIMENSION_TITLES = get_dimension_title_map(include_total=True)
 
 SHOW_BAR_IN_TREND = True
 SHOW_PIE_IN_STAT = True
@@ -165,6 +170,87 @@ def _build_preview_html(report_title: str, report_markdown: str, template_cfg: d
 
 
 def register_routes(app):
+
+    def _dim_label(dim_key: str) -> str:
+        return DIMENSION_TITLES.get(dim_key, dim_key)
+
+    def _chart_title(dim_key: str | None, gran: str, chart_kind: str, top_n: int | None = None, report_type: str | None = None) -> str:
+        dim_label = _dim_label(dim_key) if dim_key else "总量"
+
+        if dim_key == "total":
+            if chart_kind == "line":
+                return f"{dim_label} {gran} 趋势"
+            if chart_kind == "bar":
+                return f"{dim_label} {gran} 柱状图"
+            if chart_kind == "pie":
+                return f"{dim_label} 饼图"
+            return f"{dim_label} 图表"
+
+        if report_type == "statistical":
+            if chart_kind == "bar":
+                return f"{dim_label} 统计柱状图 Top{top_n} + 其他"
+            if chart_kind == "pie":
+                return f"{dim_label} 饼图 Top{top_n} + 其他"
+
+        if report_type == "trend":
+            if chart_kind == "line":
+                return f"{dim_label} {gran} 趋势 Top{top_n}"
+            if chart_kind == "bar":
+                return f"{dim_label} {gran} 柱状图 Top{top_n}"
+
+        return f"{dim_label} 图表"
+
+    def _make_plot(
+        *,
+        image: str,
+        title: str,
+        chart_kind: str,
+        report_type: str,
+        metric: str,
+        metric_label: str,
+        granularity: str,
+        dim_key: str | None = None,
+        top_n: int | None = None,
+        scope: str = "dimension",
+        categories: list | None = None,
+        periods: list | None = None
+    ) -> dict:
+        dimension_key = dim_key or "total"
+        dimension_label = _dim_label(dimension_key)
+
+        return {
+            "title": title,
+            "image": image,
+            "meta": {
+                "dimension_key": dimension_key,
+                "dimension_label": dimension_label,
+                "metric_key": metric,
+                "metric_label": metric_label,
+                "chart_kind": chart_kind,
+                "report_type": report_type,
+                "granularity": granularity,
+                "top_n": top_n,
+                "scope": scope,
+                "categories": categories or [],
+                "periods": periods or []
+            }
+        }
+
+    def _build_plot_images_and_meta(plots: list[dict]) -> tuple[dict, dict]:
+        plot_images = {}
+        plot_images_meta = {}
+
+        for idx, plot in enumerate(plots, start=1):
+            meta = plot.get("meta") or {}
+            dim_key = str(meta.get("dimension_key") or "total").strip().lower()
+            chart_kind = str(meta.get("chart_kind") or "chart").strip().lower()
+            scope = str(meta.get("scope") or ("overview" if dim_key == "total" else "dimension")).strip().lower()
+
+            image_key = f"{scope}__{dim_key}__{chart_kind}__{idx}"
+            plot_images[image_key] = plot.get("image")
+            plot_images_meta[image_key] = meta
+
+        return plot_images, plot_images_meta
 
     @app.route("/")
     def index():
@@ -349,13 +435,29 @@ def register_routes(app):
                     rows = run_query(sql, params)
                     bar_rows = build_total_rows(rows)
                     if bar_rows:
-                        plots.append({
-                            "title": f"总量 {gran} 柱状��",
-                            "image": generate_grouped_bar_chart(
-                                bar_rows, granularity=gran, period_key="period", dim_key="dimension",
-                                categories=["总量"], periods=periods_for_chart, y_label=metric_label, x_label="时间"
-                            )
-                        })
+                        plots.append(_make_plot(
+                            image=generate_grouped_bar_chart(
+                                bar_rows,
+                                granularity=gran,
+                                period_key="period",
+                                dim_key="dimension",
+                                categories=["总量"],
+                                periods=periods_for_chart,
+                                y_label=metric_label,
+                                x_label="时间"
+                            ),
+                            title=_chart_title("total", gran, "bar", report_type="statistical"),
+                            chart_kind="bar",
+                            report_type="statistical",
+                            metric=metric,
+                            metric_label=metric_label,
+                            granularity=gran,
+                            dim_key="total",
+                            top_n=None,
+                            scope="overview",
+                            categories=["总量"],
+                            periods=periods_for_chart or []
+                        ))
                     data.extend(rows)
 
                 for dim in [d for d in dims if d != "total"]:
@@ -378,13 +480,29 @@ def register_routes(app):
                             top_categories = top_categories + ["其他"]
 
                         bar_rows = [{"period": "总计", dim: r.get(dim), "value": r.get("value")} for r in top_rows]
-                        plots.append({
-                            "title": f"{dim} 统计柱状图 Top{topN} + 其他",
-                            "image": generate_grouped_bar_chart(
-                                bar_rows, granularity=gran, period_key="period", dim_key=dim,
-                                categories=top_categories, periods=["总计"], y_label=metric_label, x_label=None
-                            )
-                        })
+                        plots.append(_make_plot(
+                            image=generate_grouped_bar_chart(
+                                bar_rows,
+                                granularity=gran,
+                                period_key="period",
+                                dim_key=dim,
+                                categories=top_categories,
+                                periods=["总计"],
+                                y_label=metric_label,
+                                x_label=None
+                            ),
+                            title=_chart_title(dim, gran, "bar", top_n=topN, report_type="statistical"),
+                            chart_kind="bar",
+                            report_type="statistical",
+                            metric=metric,
+                            metric_label=metric_label,
+                            granularity=gran,
+                            dim_key=dim,
+                            top_n=topN,
+                            scope="dimension",
+                            categories=top_categories,
+                            periods=["总计"]
+                        ))
                     data.extend(rows)
 
                 if SHOW_PIE_IN_STAT:
@@ -407,26 +525,67 @@ def register_routes(app):
                                 top_rows.append({dim: "其他", "value": other_value})
                             labels = [str(r.get(dim)) for r in top_rows]
                             values = [float(r.get("value") or 0) for r in top_rows]
-                            plots.append({"title": f"{dim} 饼图 Top{topN} + 其他", "image": generate_pie_chart(labels, values)})
+                            plots.append(_make_plot(
+                                image=generate_pie_chart(labels, values),
+                                title=_chart_title(dim, gran, "pie", top_n=topN, report_type="statistical"),
+                                chart_kind="pie",
+                                report_type="statistical",
+                                metric=metric,
+                                metric_label=metric_label,
+                                granularity=gran,
+                                dim_key=dim,
+                                top_n=topN,
+                                scope="dimension",
+                                categories=labels,
+                                periods=[]
+                            ))
             else:
                 if "total" in dims:
                     sql, params = build_period_trend(metric, gran, since, until)
                     rows = run_query(sql, params)
                     series = [{"label": "总量", "data": build_total_series(rows, granularity=gran, periods=periods_for_chart)}]
                     if series[0]["data"]:
-                        plots.append({"title": f"总量 {gran} 趋势", "image": generate_line_chart(series, gran, y_label=metric_label)})
+                        plots.append(_make_plot(
+                            image=generate_line_chart(series, gran, y_label=metric_label),
+                            title=_chart_title("total", gran, "line", report_type="trend"),
+                            chart_kind="line",
+                            report_type="trend",
+                            metric=metric,
+                            metric_label=metric_label,
+                            granularity=gran,
+                            dim_key="total",
+                            top_n=None,
+                            scope="overview",
+                            categories=["总量"],
+                            periods=periods_for_chart or []
+                        ))
                     data.extend(rows)
 
                     if SHOW_BAR_IN_TREND:
                         bar_rows = build_total_rows(rows)
                         if bar_rows:
-                            plots.append({
-                                "title": f"总量 {gran} 柱状图",
-                                "image": generate_grouped_bar_chart(
-                                    bar_rows, granularity=gran, period_key="period", dim_key="dimension",
-                                    categories=["总量"], periods=periods_for_chart, y_label=metric_label
-                                )
-                            })
+                            plots.append(_make_plot(
+                                image=generate_grouped_bar_chart(
+                                    bar_rows,
+                                    granularity=gran,
+                                    period_key="period",
+                                    dim_key="dimension",
+                                    categories=["总量"],
+                                    periods=periods_for_chart,
+                                    y_label=metric_label
+                                ),
+                                title=_chart_title("total", gran, "bar", report_type="trend"),
+                                chart_kind="bar",
+                                report_type="trend",
+                                metric=metric,
+                                metric_label=metric_label,
+                                granularity=gran,
+                                dim_key="total",
+                                top_n=None,
+                                scope="overview",
+                                categories=["总量"],
+                                periods=periods_for_chart or []
+                            ))
 
                 for dim in [d for d in dims if d != "total"]:
                     sql, params = build_dimension_trend(metric, gran, dim, since, until)
@@ -437,16 +596,44 @@ def register_routes(app):
 
                     series = build_series_by_dimension(rows, dim, granularity=gran, periods=periods_for_chart)
                     if series:
-                        plots.append({"title": f"{dim} {gran} 趋势 Top{topN}", "image": generate_line_chart(series, gran, y_label=metric_label)})
+                        plots.append(_make_plot(
+                            image=generate_line_chart(series, gran, y_label=metric_label),
+                            title=_chart_title(dim, gran, "line", top_n=topN, report_type="trend"),
+                            chart_kind="line",
+                            report_type="trend",
+                            metric=metric,
+                            metric_label=metric_label,
+                            granularity=gran,
+                            dim_key=dim,
+                            top_n=topN,
+                            scope="dimension",
+                            categories=top_categories,
+                            periods=periods_for_chart or []
+                        ))
 
                     if SHOW_BAR_IN_TREND and rows:
-                        plots.append({
-                            "title": f"{dim} {gran} 柱状图 Top{topN}",
-                            "image": generate_grouped_bar_chart(
-                                rows, granularity=gran, period_key="period", dim_key=dim,
-                                categories=top_categories, periods=periods_for_chart, y_label=metric_label
-                            )
-                        })
+                        plots.append(_make_plot(
+                            image=generate_grouped_bar_chart(
+                                rows,
+                                granularity=gran,
+                                period_key="period",
+                                dim_key=dim,
+                                categories=top_categories,
+                                periods=periods_for_chart,
+                                y_label=metric_label
+                            ),
+                            title=_chart_title(dim, gran, "bar", top_n=topN, report_type="trend"),
+                            chart_kind="bar",
+                            report_type="trend",
+                            metric=metric,
+                            metric_label=metric_label,
+                            granularity=gran,
+                            dim_key=dim,
+                            top_n=topN,
+                            scope="dimension",
+                            categories=top_categories,
+                            periods=periods_for_chart or []
+                        ))
                     data.extend(rows)
 
             prompt_bundle = build_prompt_bundle(normalized, plots=plots)
@@ -457,6 +644,12 @@ def register_routes(app):
             logger.info(f"[/api/generate] prompt_head={(prompt_bundle.get('prompt') or '')[:300]}")
 
             raw_output = {
+                "meta": {
+                    "schema": "universal-report-v2",
+                    "metric": metric,
+                    "metricLabel": metric_label,
+                    "reportType": report_type
+                },
                 "summary": {"metric": metric, "reportType": report_type},
                 "plots": plots,
                 "tables": [],
@@ -483,7 +676,6 @@ def register_routes(app):
         except Exception as e:
             return jsonify({"message": str(e)}), 500
 
-    # ✅ 新增：保存用户自定义模板
     @app.route("/api/export/template/save", methods=["POST"])
     def export_template_save():
         payload = request.get_json() or {}
@@ -499,7 +691,6 @@ def register_routes(app):
             logger.exception("[EXPORT_TEMPLATE_SAVE] failed: %s", e)
             return jsonify({"message": str(e)}), 500
 
-    # ✅ 新增：删除用户自定义模板
     @app.route("/api/export/template/delete", methods=["POST"])
     def export_template_delete():
         payload = request.get_json() or {}
@@ -515,7 +706,6 @@ def register_routes(app):
             logger.exception("[EXPORT_TEMPLATE_DELETE] failed: %s", e)
             return jsonify({"message": str(e)}), 500
 
-    # ✅ 新增：获取单个模板配置
     @app.route("/api/export/template/<template_id>", methods=["GET"])
     def export_template_get(template_id: str):
         try:
@@ -525,12 +715,10 @@ def register_routes(app):
             logger.exception("[EXPORT_TEMPLATE_GET] failed: %s", e)
             return jsonify({"message": str(e)}), 500
 
-
     @app.route("/template-designer")
     def template_designer():
         return render_template("template_designer.html")
 
-    # 放在 register_routes(app) 内
     @app.route("/api/export/template/preview-docx", methods=["POST"])
     def export_template_preview_docx():
         payload = request.get_json() or {}
@@ -564,9 +752,15 @@ def register_routes(app):
         payload = request.get_json() or {}
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
-        template_config = payload.get("template_config")  # ✅ 新增：支持前端直接传配置
-        report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
+        template_config = payload.get("template_config")
+        report_title = (payload.get("report_title") or "").strip() or "数据分析报告"
+
         plot_images = payload.get("plot_images") or {}
+        plot_images_meta = payload.get("plot_images_meta") or {}
+
+        plots_payload = payload.get("plots") or []
+        if (not plot_images) and isinstance(plots_payload, list) and plots_payload:
+            plot_images, plot_images_meta = _build_plot_images_and_meta(plots_payload)
 
         selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
         selected_dimensions = build_selected_dimensions(selected_dim_keys)
@@ -578,6 +772,7 @@ def register_routes(app):
             markdown_text, inject_debug = inject_placeholders_by_sections(
                 markdown_text=markdown_text,
                 images=plot_images,
+                image_meta=plot_images_meta,
                 selected_dimensions=selected_dimensions
             )
 
@@ -596,7 +791,6 @@ def register_routes(app):
             if inject_debug.get("unmatched_to_appendix"):
                 logger.warning("[EXPORT][appendix_fallback] keys=%s", inject_debug.get("unmatched_to_appendix"))
 
-            # ✅ custom 配置优先
             if template_config and isinstance(template_config, dict):
                 cfg = template_config
             else:

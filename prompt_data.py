@@ -621,6 +621,8 @@ def _build_stat_llm_summary(metric: str, metric_label: str, granularity: str, gr
             "top3SharePct": top3_share,
             "top5SharePct": top5_share,
             "topSharePct": d.get("topSharePct"),
+            "others": d.get("others"),
+            "othersSharePct": d.get("othersSharePct"),
             "maxValue": d.get("maxValue"),
             "maxName": d.get("maxName"),
             "minValue": d.get("minValue"),

@@ -126,7 +126,10 @@
       <div class="tiny" style="margin-bottom:6px;">报告导出</div>
 
       <label>导出模板</label>
-      <select id="exportTemplate"><option value="">加载中...</option></select>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="exportTemplate" style="flex:1;"><option value="">加载中...</option></select>
+        <button id="deleteTplBtn" title="删除用户模板" style="width:auto;padding:0 10px;background:#dc2626;display:none;">删除</button>
+      </div>
 
       <label style="margin-top:8px; display:block;">导出标题（可选）</label>
       <input id="exportTitle" type="text" placeholder="例如：2026年Q1销售分析报告" />
@@ -361,9 +364,15 @@
         space_before_pt: 4,
         space_after_pt: 6,
         first_line_indent_chars: Number(document.getElementById('tpl_indent_chars').value || 2)
+      },
+      header_footer: {
+        header: { text: "", alignment: "center" },
+        footer: { show_page_number: true, prefix: "第 ", suffix: " 页", show_total_pages: false, alignment: "center" }
       }
     };
   }
+
+  const userTemplateIds = new Set();
 
   async function loadExportTemplates() {
     try {
@@ -372,6 +381,7 @@
       const j = await res.json();
       const arr = j.templates || [];
       exportTemplateSelect.innerHTML = '';
+      userTemplateIds.clear();
 
       if (!arr.length) {
         exportTemplateSelect.innerHTML = '<option value="cn_management_a4">cn_management_a4</option>';
@@ -380,11 +390,24 @@
       arr.forEach(t => {
         const op = document.createElement('option');
         op.value = t.id;
-        op.textContent = `${t.name || t.id}${t.description ? ' - ' + t.description : ''}`;
+        op.textContent = `${t.name || t.id}${t.description ? ' - ' + t.description : ''}${t.is_user ? ' ★' : ''}`;
         exportTemplateSelect.appendChild(op);
+        if (t.is_user) userTemplateIds.add(t.id);
       });
+      updateDeleteTplBtn();
     } catch {
       exportTemplateSelect.innerHTML = '<option value="cn_management_a4">cn_management_a4</option>';
+    }
+  }
+
+  function updateDeleteTplBtn() {
+    const deleteTplBtn = document.getElementById('deleteTplBtn');
+    if (!deleteTplBtn) return;
+    const selectedId = exportTemplateSelect.value;
+    if (userTemplateIds.has(selectedId)) {
+      deleteTplBtn.style.display = '';
+    } else {
+      deleteTplBtn.style.display = 'none';
     }
   }
 
@@ -622,6 +645,26 @@
   });
   document.getElementById('saveTplBtn').addEventListener('click', saveTemplate);
   document.getElementById('exportBtn').addEventListener('click', exportDocx);
+
+  exportTemplateSelect.addEventListener('change', updateDeleteTplBtn);
+
+  document.getElementById('deleteTplBtn').addEventListener('click', async () => {
+    const selectedId = exportTemplateSelect.value;
+    if (!selectedId || !userTemplateIds.has(selectedId)) return;
+    if (!confirm(`确定要删除用户模板 "${selectedId}" 吗？此操作不可恢复。`)) return;
+    try {
+      const res = await fetch('/api/export/template/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ template_id: selectedId })
+      });
+      const j = await res.json();
+      if (!res.ok) { alert(j.message || '删除失败'); return; }
+      await loadExportTemplates();
+    } catch (e) {
+      alert('删除失败: ' + (e.message || e));
+    }
+  });
 
   document.getElementById('chatInput').addEventListener('input', () => {
     clearTimeout(ctxCheckTimer);

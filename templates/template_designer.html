@@ -62,6 +62,12 @@
         <div><label>模板ID</label><input id="tpl_id" value="my_tpl" /></div>
         <div><label>模板名称</label><input id="tpl_name" value="我的模板" /></div>
       </div>
+      <label style="margin-top:8px;">加载已有模板</label>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+        <select id="loadTplSelect" style="flex:1;"><option value="">-- 选择模板 --</option></select>
+        <button id="btnLoadTpl" style="width:auto;padding:0 10px;">加载</button>
+        <button id="btnDeleteTpl" style="width:auto;padding:0 10px;background:#dc2626;" disabled>删除</button>
+      </div>
     </div>
 
     <!-- 标题字体 -->
@@ -621,6 +627,149 @@
 
   $("btnPreview").addEventListener("click", previewDocx);
   $("btnSave").addEventListener("click", saveTpl);
+
+  // ---- 加载/删除已有模板 ----
+  const loadTplSelect = $("loadTplSelect");
+  const btnLoadTpl = $("btnLoadTpl");
+  const btnDeleteTpl = $("btnDeleteTpl");
+  const userTplIds = new Set();
+
+  async function refreshTplList() {
+    try {
+      const res = await fetch("/api/export/templates");
+      const j = await res.json();
+      const arr = j.templates || [];
+      loadTplSelect.innerHTML = '<option value="">-- 选择模板 --</option>';
+      userTplIds.clear();
+      arr.forEach(t => {
+        const op = document.createElement("option");
+        op.value = t.id;
+        op.textContent = `${t.name || t.id}${t.is_user ? " ★" : ""}`;
+        loadTplSelect.appendChild(op);
+        if (t.is_user) userTplIds.add(t.id);
+      });
+      updateDeleteBtn();
+    } catch (e) {
+      console.error("加载模板列表失败", e);
+    }
+  }
+
+  function updateDeleteBtn() {
+    btnDeleteTpl.disabled = !userTplIds.has(loadTplSelect.value);
+  }
+
+  loadTplSelect.addEventListener("change", updateDeleteBtn);
+
+  btnLoadTpl.addEventListener("click", async () => {
+    const id = loadTplSelect.value;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/export/template/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const c = await res.json();
+      fillForm(c);
+      setStatus("模板已加载: " + (c.name || id));
+      schedulePreview();
+    } catch (e) {
+      setError("加载失败: " + (e.message || e));
+    }
+  });
+
+  btnDeleteTpl.addEventListener("click", async () => {
+    const id = loadTplSelect.value;
+    if (!id || !userTplIds.has(id)) return;
+    if (!confirm(`确定要删除用户模板 "${id}" 吗？此操作不可恢复。`)) return;
+    try {
+      const res = await fetch("/api/export/template/delete", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ template_id: id })
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || ("HTTP " + res.status));
+      setStatus("模板已删除");
+      await refreshTplList();
+    } catch (e) {
+      setError("删除失败: " + (e.message || e));
+    }
+  });
+
+  function fillForm(templateConfig) {
+    function setField(id, val) {
+      const el = $(id);
+      if (!el || val === undefined || val === null) return;
+      if (el.type === "checkbox") el.checked = !!val;
+      else el.value = val;
+    }
+
+    function fillFont(prefix, font) {
+      font = font || {};
+      setField(prefix + "_font", font.family);
+      setField(prefix + "_size", font.size_pt);
+      setField(prefix + "_bold", font.bold);
+      setField(prefix + "_italic", font.italic);
+      if (font.color) setField(prefix + "_color", font.color);
+    }
+
+    function fillParaStyle(prefix, style) {
+      style = style || {};
+      setField(prefix + "_align", style.alignment);
+      setField(prefix + "_lsp", style.line_spacing);
+      setField(prefix + "_sb", style.space_before_pt);
+      setField(prefix + "_sa", style.space_after_pt);
+      setField(prefix + "_indent", style.first_line_indent_chars);
+    }
+
+    setField("tpl_id", templateConfig.id);
+    setField("tpl_name", templateConfig.name);
+
+    const fonts = templateConfig.fonts || {};
+    fillFont("title", fonts.title);
+    fillFont("h1", fonts.h1);
+    fillFont("h2", fonts.h2);
+    fillFont("h3", fonts.h3);
+    fillFont("h4", fonts.h4);
+    fillFont("body", fonts.body);
+    fillFont("list", fonts.list);
+
+    const ps = templateConfig.paragraph_styles || {};
+    fillParaStyle("title", ps.title);
+    fillParaStyle("h1", ps.h1);
+    fillParaStyle("h2", ps.h2);
+    fillParaStyle("h3", ps.h3);
+    fillParaStyle("h4", ps.h4);
+    // body uses different id keys
+    const pb = ps.body || {};
+    setField("body_align", pb.alignment);
+    setField("line_spacing", pb.line_spacing);
+    setField("body_sb", pb.space_before_pt);
+    setField("body_sa", pb.space_after_pt);
+    setField("indent_chars", pb.first_line_indent_chars);
+
+    const page = templateConfig.page || {};
+    setField("page_size", page.size);
+    setField("page_orient", page.orientation);
+    const margins = page.margin_cm || [];
+    if (margins.length === 4) {
+      setField("m_top", margins[0]);
+      setField("m_right", margins[1]);
+      setField("m_bottom", margins[2]);
+      setField("m_left", margins[3]);
+    }
+
+    const hf = templateConfig.header_footer || {};
+    const header = hf.header || {};
+    setField("header_text", header.text);
+    setField("header_align", header.alignment);
+    const footer = hf.footer || {};
+    setField("footer_pagenum", footer.show_page_number);
+    setField("footer_prefix", footer.prefix);
+    setField("footer_suffix", footer.suffix);
+    setField("footer_total", footer.show_total_pages);
+    setField("footer_align", footer.alignment);
+  }
+
+  refreshTplList();
 
   const watchIds = [
     "tpl_id","tpl_name",

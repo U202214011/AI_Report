@@ -30,6 +30,7 @@ from export_service import (
     build_export_filename,
     inject_placeholders_by_sections,
     save_user_template_config,   # ✅ 新增：保存用户模板
+    delete_user_template_config,  # ✅ 新增：删除用户模板
 )
 
 logger = logging.getLogger(__name__)
@@ -499,6 +500,32 @@ def register_routes(app):
             return jsonify({"ok": True, "template_id": saved.get("id")})
         except Exception as e:
             logger.exception("[EXPORT_TEMPLATE_SAVE] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
+
+    # ✅ 新增：删除用户自定义模板
+    @app.route("/api/export/template/delete", methods=["POST"])
+    def export_template_delete():
+        payload = request.get_json() or {}
+        template_id = (payload.get("template_id") or "").strip()
+        if not template_id:
+            return jsonify({"message": "template_id 不能为空"}), 400
+        try:
+            delete_user_template_config(template_id)
+            return jsonify({"ok": True})
+        except FileNotFoundError as e:
+            return jsonify({"message": str(e)}), 404
+        except Exception as e:
+            logger.exception("[EXPORT_TEMPLATE_DELETE] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
+
+    # ✅ 新增：获取单个模板配置
+    @app.route("/api/export/template/<template_id>", methods=["GET"])
+    def export_template_get(template_id: str):
+        try:
+            cfg = load_template_config(template_id)
+            return jsonify(cfg)
+        except Exception as e:
+            logger.exception("[EXPORT_TEMPLATE_GET] failed: %s", e)
             return jsonify({"message": str(e)}), 500
 
 

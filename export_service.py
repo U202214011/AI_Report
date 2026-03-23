@@ -833,33 +833,35 @@ def list_export_templates() -> List[Dict[str, Any]]:
     """
     out: List[Dict[str, Any]] = []
 
-    def scan_dir(dir_path: str):
-      if not os.path.exists(dir_path):
-          return
-      for fn in os.listdir(dir_path):
-          if not fn.endswith(".json"):
-              continue
-          path = os.path.join(dir_path, fn)
-          try:
-              with open(path, "r", encoding="utf-8") as f:
-                  cfg = json.load(f)
-              out.append({
-                  "id": cfg.get("id") or os.path.splitext(fn)[0],
-                  "name": cfg.get("name") or os.path.splitext(fn)[0],
-                  "description": cfg.get("description", ""),
-                  "file": fn
-              })
-          except Exception:
-              continue
+    def scan_dir(dir_path: str, is_user: bool = False):
+        if not os.path.exists(dir_path):
+            return
+        for fn in os.listdir(dir_path):
+            if not fn.endswith(".json"):
+                continue
+            file_id = os.path.splitext(fn)[0]  # 始终用文件名作为 id
+            path = os.path.join(dir_path, fn)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                out.append({
+                    "id": file_id,  # 关键：使用文件名作为 id
+                    "name": cfg.get("name") or file_id,
+                    "description": cfg.get("description", ""),
+                    "file": fn,
+                    "is_user": is_user
+                })
+            except Exception:
+                continue
 
-    scan_dir(TEMPLATE_DIR)
-    scan_dir(USER_TEMPLATE_DIR)
+    scan_dir(TEMPLATE_DIR, is_user=False)
+    scan_dir(USER_TEMPLATE_DIR, is_user=True)
 
-    # 去重（用户模板覆盖同名内置）
-    m = {}
+    # 去重（用户模板覆盖同名内置），保留 is_user 标记
+    m: Dict[str, Any] = {}
     for x in out:
         m[x["id"]] = x
-    return sorted(m.values(), key=lambda x: x["id"])
+    return sorted(m.values(), key=lambda x: (0 if x["is_user"] else 1, x["id"]))
 
 
 def load_template_config(template_id: str | None) -> Dict[str, Any]:
@@ -895,6 +897,17 @@ def save_user_template_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
     return {"id": safe_id, "path": path}
+
+
+def delete_user_template_config(template_id: str) -> None:
+    """删除用户模板，只能删除 USER_TEMPLATE_DIR 中的模板"""
+    safe_id = re.sub(r"[^a-zA-Z0-9_\-]+", "_", (template_id or "").strip())
+    if not safe_id:
+        raise ValueError("template_id 不能为空")
+    path = os.path.join(USER_TEMPLATE_DIR, f"{safe_id}.json")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"用户模板 '{safe_id}' 不存在")
+    os.remove(path)
 
 # ---------------------------
 # markdown -> docx（增强版）

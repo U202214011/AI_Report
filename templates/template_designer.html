@@ -11,18 +11,22 @@
     }
     *{box-sizing:border-box}
     body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .layout{display:grid;grid-template-columns:420px 1fr;height:100vh}
+    .layout{display:grid;grid-template-columns:460px 1fr;height:100vh}
     .left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:12px}
     .right{padding:12px;overflow:auto}
     .card{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fbfdff}
-    .row{display:flex;gap:8px}.row>*{flex:1}
-    h3{margin:0 0 8px 0}
-    label{display:block;margin-top:6px;font-size:13px}
-    input,textarea,select,button{
-      width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;background:#fff
+    .card-title{font-weight:600;font-size:13px;margin-bottom:6px;color:var(--brand)}
+    .row{display:flex;gap:6px;align-items:flex-end}.row>*{flex:1}
+    h3{margin:0 0 6px 0}
+    label{display:block;margin-top:6px;font-size:12px;color:var(--muted)}
+    input[type=text],input[type=number],select,textarea{
+      width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font:inherit;background:#fff;font-size:13px
     }
+    input[type=color]{width:100%;height:32px;padding:2px 4px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer}
+    input[type=checkbox]{width:auto;margin-right:4px;accent-color:var(--brand)}
+    .cb-row{display:flex;align-items:center;gap:12px;margin-top:8px;font-size:13px}
     textarea{min-height:130px;resize:vertical}
-    button{border:none;background:var(--brand);color:#fff;cursor:pointer;height:36px}
+    button{width:100%;padding:8px;border:none;background:var(--brand);color:#fff;cursor:pointer;border-radius:8px;font:inherit;height:36px}
     button.secondary{background:#4b5563}
     button:disabled{opacity:.65;cursor:not-allowed}
     .tiny{font-size:12px;color:var(--muted)}
@@ -37,9 +41,8 @@
     .toolbar .leftx{display:flex;gap:8px;align-items:center}
     .dot{width:8px;height:8px;border-radius:999px;background:#9ca3af;display:inline-block}
     .dot.live{background:#16a34a}
-    .msg{
-      margin-top:8px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff
-    }
+    .msg{margin-top:8px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff}
+    details>summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--brand);padding:4px 0}
     @media (max-width: 1100px){
       .layout{grid-template-columns:1fr}
       .left{border-right:none;border-bottom:1px solid var(--line)}
@@ -52,70 +55,266 @@
     <h3>模板配置中心</h3>
     <div class="tiny">修改配置后可实时预览 DOCX 渲染效果（docx-preview）</div>
 
+    <!-- 基本信息 -->
     <div class="card">
-      <label>模板ID</label>
-      <input id="tpl_id" value="my_tpl" />
-
-      <label>模板名称</label>
-      <input id="tpl_name" value="我的模板" />
-    </div>
-
-    <div class="card">
+      <div class="card-title">基本信息</div>
       <div class="row">
-        <div>
-          <label>正文字体</label>
-          <input id="body_font" value="宋体" />
-        </div>
-        <div>
-          <label>正文字号</label>
-          <input id="body_size" type="number" value="11" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>H1 字体</label>
-          <input id="h1_font" value="微软雅黑" />
-        </div>
-        <div>
-          <label>H1 字号</label>
-          <input id="h1_size" type="number" value="15" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>行距</label>
-          <input id="line_spacing" type="number" step="0.1" value="1.5" />
-        </div>
-        <div>
-          <label>首行缩进字符</label>
-          <input id="indent_chars" type="number" value="2" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>上边距(cm)</label>
-          <input id="m_top" type="number" step="0.1" value="2.5" />
-        </div>
-        <div>
-          <label>右边距(cm)</label>
-          <input id="m_right" type="number" step="0.1" value="2.2" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>下边距(cm)</label>
-          <input id="m_bottom" type="number" step="0.1" value="2.5" />
-        </div>
-        <div>
-          <label>左边距(cm)</label>
-          <input id="m_left" type="number" step="0.1" value="2.2" />
-        </div>
+        <div><label>模板ID</label><input id="tpl_id" value="my_tpl" /></div>
+        <div><label>模板名称</label><input id="tpl_name" value="我的模板" /></div>
       </div>
     </div>
 
+    <!-- 标题字体 -->
+    <div class="card">
+      <details open>
+        <summary>标题（Title）字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="title_font" value="微软雅黑" /></div>
+          <div><label>字号(pt)</label><input id="title_size" type="number" value="18" /></div>
+          <div><label>颜色</label><input id="title_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="title_bold" type="checkbox" checked />粗体</label>
+          <label><input id="title_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="title_align">
+          <option value="center" selected>居中</option>
+          <option value="left">左对齐</option>
+          <option value="right">右对齐</option>
+          <option value="justify">两端对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="title_lsp" type="number" step="0.1" value="1.2" /></div>
+          <div><label>段前(pt)</label><input id="title_sb" type="number" value="0" /></div>
+          <div><label>段后(pt)</label><input id="title_sa" type="number" value="18" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="title_indent" type="number" value="0" /></div>
+      </details>
+    </div>
+
+    <!-- H1 字体 -->
+    <div class="card">
+      <details open>
+        <summary>H1 字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="h1_font" value="微软雅黑" /></div>
+          <div><label>字号(pt)</label><input id="h1_size" type="number" value="15" /></div>
+          <div><label>颜色</label><input id="h1_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="h1_bold" type="checkbox" checked />粗体</label>
+          <label><input id="h1_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="h1_align">
+          <option value="left" selected>左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+          <option value="justify">两端对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="h1_lsp" type="number" step="0.1" value="1.2" /></div>
+          <div><label>段前(pt)</label><input id="h1_sb" type="number" value="18" /></div>
+          <div><label>段后(pt)</label><input id="h1_sa" type="number" value="6" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="h1_indent" type="number" value="0" /></div>
+      </details>
+    </div>
+
+    <!-- H2 字体 -->
+    <div class="card">
+      <details>
+        <summary>H2 字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="h2_font" value="微软雅黑" /></div>
+          <div><label>字号(pt)</label><input id="h2_size" type="number" value="13" /></div>
+          <div><label>颜色</label><input id="h2_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="h2_bold" type="checkbox" checked />粗体</label>
+          <label><input id="h2_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="h2_align">
+          <option value="left" selected>左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+          <option value="justify">两端对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="h2_lsp" type="number" step="0.1" value="1.2" /></div>
+          <div><label>段前(pt)</label><input id="h2_sb" type="number" value="12" /></div>
+          <div><label>段后(pt)</label><input id="h2_sa" type="number" value="4" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="h2_indent" type="number" value="0" /></div>
+      </details>
+    </div>
+
+    <!-- H3 字体 -->
+    <div class="card">
+      <details>
+        <summary>H3 字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="h3_font" value="微软雅黑" /></div>
+          <div><label>字号(pt)</label><input id="h3_size" type="number" value="12" /></div>
+          <div><label>颜色</label><input id="h3_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="h3_bold" type="checkbox" checked />粗体</label>
+          <label><input id="h3_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="h3_align">
+          <option value="left" selected>左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+          <option value="justify">两端对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="h3_lsp" type="number" step="0.1" value="1.2" /></div>
+          <div><label>段前(pt)</label><input id="h3_sb" type="number" value="10" /></div>
+          <div><label>段后(pt)</label><input id="h3_sa" type="number" value="4" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="h3_indent" type="number" value="0" /></div>
+      </details>
+    </div>
+
+    <!-- H4 字体 -->
+    <div class="card">
+      <details>
+        <summary>H4 字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="h4_font" value="微软雅黑" /></div>
+          <div><label>字号(pt)</label><input id="h4_size" type="number" value="11" /></div>
+          <div><label>颜色</label><input id="h4_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="h4_bold" type="checkbox" checked />粗体</label>
+          <label><input id="h4_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="h4_align">
+          <option value="left" selected>左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+          <option value="justify">两端对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="h4_lsp" type="number" step="0.1" value="1.2" /></div>
+          <div><label>段前(pt)</label><input id="h4_sb" type="number" value="8" /></div>
+          <div><label>段后(pt)</label><input id="h4_sa" type="number" value="4" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="h4_indent" type="number" value="0" /></div>
+      </details>
+    </div>
+
+    <!-- 正文字体 -->
+    <div class="card">
+      <details open>
+        <summary>正文（Body）字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="body_font" value="宋体" /></div>
+          <div><label>字号(pt)</label><input id="body_size" type="number" value="11" /></div>
+          <div><label>颜色</label><input id="body_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="body_bold" type="checkbox" />粗体</label>
+          <label><input id="body_italic" type="checkbox" />斜体</label>
+        </div>
+        <label>对齐</label>
+        <select id="body_align">
+          <option value="justify" selected>两端对齐</option>
+          <option value="left">左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+        </select>
+        <div class="row">
+          <div><label>行距</label><input id="line_spacing" type="number" step="0.1" value="1.5" /></div>
+          <div><label>段前(pt)</label><input id="body_sb" type="number" value="0" /></div>
+          <div><label>段后(pt)</label><input id="body_sa" type="number" value="6" /></div>
+        </div>
+        <div><label>首行缩进(字符)</label><input id="indent_chars" type="number" value="2" /></div>
+      </details>
+    </div>
+
+    <!-- 列表字体 -->
+    <div class="card">
+      <details>
+        <summary>列表（List）字体</summary>
+        <div class="row">
+          <div><label>字体</label><input id="list_font" value="宋体" /></div>
+          <div><label>字号(pt)</label><input id="list_size" type="number" value="11" /></div>
+          <div><label>颜色</label><input id="list_color" type="color" value="#000000" /></div>
+        </div>
+        <div class="cb-row">
+          <label><input id="list_bold" type="checkbox" />粗体</label>
+          <label><input id="list_italic" type="checkbox" />斜体</label>
+        </div>
+      </details>
+    </div>
+
+    <!-- 页面设置 -->
+    <div class="card">
+      <details open>
+        <summary>页面设置</summary>
+        <div class="row">
+          <div>
+            <label>页面尺寸</label>
+            <select id="page_size">
+              <option value="A4" selected>A4</option>
+              <option value="Letter">Letter</option>
+            </select>
+          </div>
+          <div>
+            <label>方向</label>
+            <select id="page_orient">
+              <option value="portrait" selected>纵向</option>
+              <option value="landscape">横向</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label>上边距(cm)</label><input id="m_top" type="number" step="0.1" value="2.5" /></div>
+          <div><label>右边距(cm)</label><input id="m_right" type="number" step="0.1" value="2.2" /></div>
+        </div>
+        <div class="row">
+          <div><label>下边距(cm)</label><input id="m_bottom" type="number" step="0.1" value="2.5" /></div>
+          <div><label>左边距(cm)</label><input id="m_left" type="number" step="0.1" value="2.2" /></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- 页眉页脚 -->
+    <div class="card">
+      <details>
+        <summary>页眉 / 页脚</summary>
+        <label>页眉文字</label>
+        <input id="header_text" type="text" placeholder="（空=不显示页眉）" />
+        <label>页眉对齐</label>
+        <select id="header_align">
+          <option value="center" selected>居中</option>
+          <option value="left">左对齐</option>
+          <option value="right">右对齐</option>
+        </select>
+        <div class="cb-row" style="margin-top:8px;">
+          <label><input id="footer_pagenum" type="checkbox" checked />显示页码</label>
+          <label><input id="footer_total" type="checkbox" />显示总页数</label>
+        </div>
+        <div class="row">
+          <div><label>页码前缀</label><input id="footer_prefix" value="第 " /></div>
+          <div><label>页码后缀</label><input id="footer_suffix" value=" 页" /></div>
+        </div>
+        <label>页脚对齐</label>
+        <select id="footer_align">
+          <option value="center" selected>居中</option>
+          <option value="left">左对齐</option>
+          <option value="right">右对齐</option>
+        </select>
+      </details>
+    </div>
+
+    <!-- 预览内容 & 操作 -->
     <div class="card">
       <label>预览内容 (Markdown)</label>
       <textarea id="preview_md"># 2026Q1 销售分析报告
@@ -172,7 +371,6 @@
 
   let previewTimer = null;
   let requestSeq = 0;
-  let latestRenderedSeq = 0;
 
   function setStatus(msg, ok=true){
     statusEl.className = "status " + (ok ? "ok" : "err");
@@ -180,22 +378,24 @@
   }
 
   function setError(msg){
-    if (!msg){
-      errEl.style.display = "none";
-      errEl.textContent = "";
-      return;
-    }
+    if (!msg){ errEl.style.display = "none"; errEl.textContent = ""; return; }
     errEl.style.display = "block";
     errEl.textContent = msg;
+  }
+
+  function colorVal(id) {
+    const v = $(id).value;
+    return (v && v !== "#000000") ? v : undefined;
   }
 
   function cfg(){
     return {
       id: $("tpl_id").value.trim() || "my_tpl",
       name: $("tpl_name").value.trim() || "我的模板",
-      description: "用户配置模板",
+      description: "模板配置中心保存",
       page: {
-        size: "A4",
+        size: $("page_size").value || "A4",
+        orientation: $("page_orient").value || "portrait",
         margin_cm: [
           Number($("m_top").value || 2.5),
           Number($("m_right").value || 2.2),
@@ -204,33 +404,131 @@
         ]
       },
       fonts: {
-        title:{family:"微软雅黑",size_pt:18,bold:true},
-        h1:{family:$("h1_font").value || "微软雅黑",size_pt:Number($("h1_size").value || 15),bold:true},
-        h2:{family:"微软雅黑",size_pt:13,bold:true},
-        h3:{family:"微软雅黑",size_pt:12,bold:true},
-        h4:{family:"微软雅黑",size_pt:11,bold:true},
-        body:{family:$("body_font").value || "宋体",size_pt:Number($("body_size").value || 11),bold:false},
-        list:{family:$("body_font").value || "宋体",size_pt:Number($("body_size").value || 11),bold:false}
+        title: {
+          family: $("title_font").value || "微软雅黑",
+          size_pt: Number($("title_size").value || 18),
+          bold: $("title_bold").checked,
+          italic: $("title_italic").checked,
+          color: colorVal("title_color")
+        },
+        h1: {
+          family: $("h1_font").value || "微软雅黑",
+          size_pt: Number($("h1_size").value || 15),
+          bold: $("h1_bold").checked,
+          italic: $("h1_italic").checked,
+          color: colorVal("h1_color")
+        },
+        h2: {
+          family: $("h2_font").value || "微软雅黑",
+          size_pt: Number($("h2_size").value || 13),
+          bold: $("h2_bold").checked,
+          italic: $("h2_italic").checked,
+          color: colorVal("h2_color")
+        },
+        h3: {
+          family: $("h3_font").value || "微软雅黑",
+          size_pt: Number($("h3_size").value || 12),
+          bold: $("h3_bold").checked,
+          italic: $("h3_italic").checked,
+          color: colorVal("h3_color")
+        },
+        h4: {
+          family: $("h4_font").value || "微软雅黑",
+          size_pt: Number($("h4_size").value || 11),
+          bold: $("h4_bold").checked,
+          italic: $("h4_italic").checked,
+          color: colorVal("h4_color")
+        },
+        body: {
+          family: $("body_font").value || "宋体",
+          size_pt: Number($("body_size").value || 11),
+          bold: $("body_bold").checked,
+          italic: $("body_italic").checked,
+          color: colorVal("body_color")
+        },
+        list: {
+          family: $("list_font").value || "宋体",
+          size_pt: Number($("list_size").value || 11),
+          bold: $("list_bold").checked,
+          italic: $("list_italic").checked,
+          color: colorVal("list_color")
+        }
       },
       paragraph_styles: {
-        title:{alignment:"center",line_spacing:1.2,space_before_pt:0,space_after_pt:18,first_line_indent_chars:0},
-        h1:{alignment:"left",line_spacing:1.2,space_before_pt:18,space_after_pt:6,first_line_indent_chars:0},
-        h2:{alignment:"left",line_spacing:1.2,space_before_pt:12,space_after_pt:4,first_line_indent_chars:0},
-        body:{
-          alignment:"justify",
-          line_spacing:Number($("line_spacing").value || 1.5),
-          space_before_pt:0,
-          space_after_pt:6,
-          first_line_indent_chars:Number($("indent_chars").value || 2)
+        title: {
+          alignment: $("title_align").value || "center",
+          line_spacing: Number($("title_lsp").value || 1.2),
+          space_before_pt: Number($("title_sb").value || 0),
+          space_after_pt: Number($("title_sa").value || 18),
+          first_line_indent_chars: Number($("title_indent").value || 0),
+          keep_with_next: true
         },
-        list:{alignment:"left",line_spacing:1.3,space_before_pt:0,space_after_pt:4,first_line_indent_chars:0}
+        h1: {
+          alignment: $("h1_align").value || "left",
+          line_spacing: Number($("h1_lsp").value || 1.2),
+          space_before_pt: Number($("h1_sb").value || 18),
+          space_after_pt: Number($("h1_sa").value || 6),
+          first_line_indent_chars: Number($("h1_indent").value || 0),
+          keep_with_next: true
+        },
+        h2: {
+          alignment: $("h2_align").value || "left",
+          line_spacing: Number($("h2_lsp").value || 1.2),
+          space_before_pt: Number($("h2_sb").value || 12),
+          space_after_pt: Number($("h2_sa").value || 4),
+          first_line_indent_chars: Number($("h2_indent").value || 0),
+          keep_with_next: true
+        },
+        h3: {
+          alignment: $("h3_align").value || "left",
+          line_spacing: Number($("h3_lsp").value || 1.2),
+          space_before_pt: Number($("h3_sb").value || 10),
+          space_after_pt: Number($("h3_sa").value || 4),
+          first_line_indent_chars: Number($("h3_indent").value || 0),
+          keep_with_next: false
+        },
+        h4: {
+          alignment: $("h4_align").value || "left",
+          line_spacing: Number($("h4_lsp").value || 1.2),
+          space_before_pt: Number($("h4_sb").value || 8),
+          space_after_pt: Number($("h4_sa").value || 4),
+          first_line_indent_chars: Number($("h4_indent").value || 0),
+          keep_with_next: false
+        },
+        body: {
+          alignment: $("body_align").value || "justify",
+          line_spacing: Number($("line_spacing").value || 1.5),
+          space_before_pt: Number($("body_sb").value || 0),
+          space_after_pt: Number($("body_sa").value || 6),
+          first_line_indent_chars: Number($("indent_chars").value || 2)
+        },
+        list: {
+          alignment: "left",
+          line_spacing: 1.3,
+          space_before_pt: 0,
+          space_after_pt: 4,
+          first_line_indent_chars: 0
+        }
       },
-      image:{max_width_cm:16,alignment:"center"},
-      paragraph:{
-        line_spacing:Number($("line_spacing").value || 1.5),
-        space_before_pt:4,
-        space_after_pt:6,
-        first_line_indent_chars:Number($("indent_chars").value || 2)
+      header_footer: {
+        header: {
+          text: $("header_text").value || "",
+          alignment: $("header_align").value || "center"
+        },
+        footer: {
+          show_page_number: $("footer_pagenum").checked,
+          prefix: $("footer_prefix").value,
+          suffix: $("footer_suffix").value,
+          show_total_pages: $("footer_total").checked,
+          alignment: $("footer_align").value || "center"
+        }
+      },
+      image: {max_width_cm: 16, alignment: "center"},
+      paragraph: {
+        line_spacing: Number($("line_spacing").value || 1.5),
+        space_before_pt: 4,
+        space_after_pt: 6,
+        first_line_indent_chars: Number($("indent_chars").value || 2)
       }
     };
   }
@@ -263,8 +561,6 @@
       }
 
       const arr = await res.arrayBuffer();
-
-      // 只渲染最后一次请求结果，避免并发乱序
       if (seq < requestSeq) return;
 
       previewEl.innerHTML = "";
@@ -277,7 +573,6 @@
         ignoreFonts: false
       });
 
-      latestRenderedSeq = seq;
       liveDot.classList.add("live");
       const kb = (arr.byteLength / 1024).toFixed(1);
       metaEl.textContent = `预览已更新 · ${kb} KB`;
@@ -296,14 +591,21 @@
     setError("");
     try {
       const res = await fetch("/api/export/template/save", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ template_config: cfg() })
       });
       const j = await res.json().catch(() => ({}));
-      if(!res.ok) throw new Error(j.message || ("HTTP " + res.status));
+      if (!res.ok) throw new Error(j.message || ("HTTP " + res.status));
       setStatus("模板已保存");
       alert("模板已保存");
+      // Notify index.html to refresh template dropdown
+      try {
+        const bc = new BroadcastChannel("tpl_saved");
+        bc.postMessage({ ts: Date.now() });
+        bc.close();
+      } catch(e) {}
+      try { localStorage.setItem("tpl_saved", Date.now()); } catch(e) {}
     } catch (e) {
       const msg = e?.message || String(e);
       setStatus("保存失败", false);
@@ -317,23 +619,34 @@
     previewTimer = setTimeout(() => previewDocx(), 600);
   }
 
-  // 事件绑定
   $("btnPreview").addEventListener("click", previewDocx);
   $("btnSave").addEventListener("click", saveTpl);
 
-  [
-    "tpl_id","tpl_name","body_font","body_size","h1_font","h1_size",
-    "line_spacing","indent_chars","m_top","m_right","m_bottom","m_left","preview_md"
-  ].forEach(id => {
-    $(id).addEventListener("input", schedulePreview);
-    $(id).addEventListener("change", schedulePreview);
+  const watchIds = [
+    "tpl_id","tpl_name",
+    "title_font","title_size","title_color","title_bold","title_italic","title_align","title_lsp","title_sb","title_sa","title_indent",
+    "h1_font","h1_size","h1_color","h1_bold","h1_italic","h1_align","h1_lsp","h1_sb","h1_sa","h1_indent",
+    "h2_font","h2_size","h2_color","h2_bold","h2_italic","h2_align","h2_lsp","h2_sb","h2_sa","h2_indent",
+    "h3_font","h3_size","h3_color","h3_bold","h3_italic","h3_align","h3_lsp","h3_sb","h3_sa","h3_indent",
+    "h4_font","h4_size","h4_color","h4_bold","h4_italic","h4_align","h4_lsp","h4_sb","h4_sa","h4_indent",
+    "body_font","body_size","body_color","body_bold","body_italic","body_align","line_spacing","body_sb","body_sa","indent_chars",
+    "list_font","list_size","list_color","list_bold","list_italic",
+    "page_size","page_orient","m_top","m_right","m_bottom","m_left",
+    "header_text","header_align","footer_pagenum","footer_total","footer_prefix","footer_suffix","footer_align",
+    "preview_md"
+  ];
+
+  watchIds.forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("input", schedulePreview);
+    el.addEventListener("change", schedulePreview);
   });
 
   $("autoPreview").addEventListener("change", () => {
     if ($("autoPreview").checked) schedulePreview();
   });
 
-  // 首次预览
   previewDocx();
 })();
 </script>

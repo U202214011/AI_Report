@@ -8,7 +8,7 @@ from io import BytesIO
 from datetime import datetime
 
 from docx import Document
-from docx.shared import Pt, Cm, Inches
+from docx.shared import Pt, Cm, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml.ns import qn
@@ -112,7 +112,7 @@ def _add_tab_stops(pf, tab_stops: List[Dict[str, Any]]):
         pf.tab_stops.add_tab_stop(_cm(pos), align, leader)
 
 
-def _set_run_font(run, family: str, size_pt: float, bold: bool = False, italic: bool = False, underline: bool = False):
+def _set_run_font(run, family: str, size_pt: float, bold: bool = False, italic: bool = False, underline: bool = False, color: str | None = None):
     run.font.name = family
     rPr = run._element.get_or_add_rPr()
     rFonts = rPr.get_or_add_rFonts()
@@ -122,6 +122,14 @@ def _set_run_font(run, family: str, size_pt: float, bold: bool = False, italic: 
     run.bold = bool(bold)
     run.italic = bool(italic)
     run.underline = bool(underline)
+    if color:
+        try:
+            c = color.lstrip("#")
+            if len(c) == 6:
+                r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+                run.font.color.rgb = RGBColor(r, g, b)
+        except Exception:
+            pass
 
 
 _ALIGNMENT_MAP = {
@@ -272,7 +280,8 @@ def _add_text_paragraph(doc: Document, text: str, style_key: str, cfg: Dict[str,
             size_pt=float(font_cfg.get("size_pt", 11)),
             bold=is_bold or bool(font_cfg.get("bold", False)),
             italic=is_italic,
-            underline=is_underline
+            underline=is_underline,
+            color=font_cfg.get("color")
         )
     return p
 
@@ -416,8 +425,7 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
         p = sec.header.paragraphs[0] if sec.header.paragraphs else sec.header.add_paragraph()
         p.clear()
         run = p.add_run(str(header_cfg["text"]))
-        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False)
-        p.paragraph_format.alignment = _ALIGNMENT_MAP.get(header_cfg.get("alignment", "center"), WD_ALIGN_PARAGRAPH.CENTER)
+        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
 
     # footer
     footer_cfg = hf.get("footer", {})
@@ -431,24 +439,24 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
         align = footer_cfg.get("alignment", "center")
 
         r1 = p.add_run(prefix)
-        _set_run_font(r1, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)))
+        _set_run_font(r1, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
 
         _add_field_run(p, "PAGE")
 
         if total_format:
             r2 = p.add_run(" / ")
-            _set_run_font(r2, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)))
+            _set_run_font(r2, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
             _add_field_run(p, "NUMPAGES")
 
         r3 = p.add_run(suffix)
-        _set_run_font(r3, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)))
+        _set_run_font(r3, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
 
         p.paragraph_format.alignment = _ALIGNMENT_MAP.get(align, WD_ALIGN_PARAGRAPH.CENTER)
     elif footer_cfg.get("text"):
         p = sec.footer.paragraphs[0] if sec.footer.paragraphs else sec.footer.add_paragraph()
         p.clear()
         run = p.add_run(str(footer_cfg["text"]))
-        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False)
+        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
         p.paragraph_format.alignment = _ALIGNMENT_MAP.get(footer_cfg.get("alignment", "center"), WD_ALIGN_PARAGRAPH.CENTER)
 
 
@@ -522,9 +530,9 @@ def _add_markdown_table(doc: Document, rows: List[List[str]], cfg: Dict[str, Any
             p.clear()
             run = p.add_run(txt)
             if ridx == 0:
-                _set_run_font(run, head_font.get("family", "宋体"), float(head_font.get("size_pt", 10)), bold=True)
+                _set_run_font(run, head_font.get("family", "宋体"), float(head_font.get("size_pt", 10)), bold=True, color=head_font.get("color"))
             else:
-                _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False)
+                _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
 
 
 # ---------------------------
@@ -1016,7 +1024,8 @@ def render_markdown_to_docx_bytes(
                         continue
                     run = p.add_run(seg)
                     _set_run_font(run, font_cfg.get("family", "宋体"), float(font_cfg.get("size_pt", 11)),
-                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline)
+                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline,
+                                  color=font_cfg.get("color"))
             except KeyError:
                 _add_text_paragraph(doc, f"{_BULLET_CHAR} {text}", "list", template_cfg)
             i += 1
@@ -1033,7 +1042,8 @@ def render_markdown_to_docx_bytes(
                         continue
                     run = p.add_run(seg)
                     _set_run_font(run, font_cfg.get("family", "宋体"), float(font_cfg.get("size_pt", 11)),
-                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline)
+                                  bold=is_bold or bool(font_cfg.get("bold", False)), italic=is_italic, underline=is_underline,
+                                  color=font_cfg.get("color"))
             except KeyError:
                 _add_text_paragraph(doc, text, "list", template_cfg)
             i += 1

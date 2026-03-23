@@ -190,12 +190,11 @@
             <div style="flex:1;"><label>左(cm)</label><input id="tpl_m_left" type="number" step="0.1" value="2.2" /></div>
           </div>
 
-          <div id="tplPreviewBox" class="tpl-preview tiny">点击“预览模板”查看效果</div>
-          <div class="row">
+                    <div class="row">
             <button id="openDesignerBtn" type="button" class="btn2" style="flex:1;">打开模板配置中心</button>
             <button id="saveTplBtn" type="button" style="flex:1;">保存模板</button>
           </div>
-          <div class="tpl-preview tiny">DOCX 预览请在“模板配置中心”中进行（/template-designer）。</div>
+          <div class="tpl-preview tiny">完整配置与 DOCX 预览请在模板配置中心进行</div>
         </div>
       </div>
 
@@ -636,6 +635,16 @@
 
   loadExportTemplates();
   refreshCtxThrottled(true);
+
+  // Auto-refresh template dropdown when template_designer saves a template
+  window.addEventListener("focus", () => { loadExportTemplates(); });
+  window.addEventListener("storage", (e) => {
+    if (e.key === "tpl_saved") { loadExportTemplates(); }
+  });
+  try {
+    const _tplBC = new BroadcastChannel("tpl_saved");
+    _tplBC.onmessage = () => { loadExportTemplates(); };
+  } catch(e) {}
 </script>
 </body>
 </html>

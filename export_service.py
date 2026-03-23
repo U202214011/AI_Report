@@ -608,16 +608,20 @@ def _build_dimension_maps(
 
 def _find_main_sections(headings: List[Dict[str, Any]], total_lines: int) -> Dict[str, Dict[str, Any]]:
     def _is_overview_title(norm: str) -> bool:
-        return "概览" in norm
+        keywords = ["概览", "总览", "概况", "总体", "整体"]
+        return any(k in norm for k in keywords)
 
     def _is_findings_title(norm: str) -> bool:
-        return ("维度" in norm) or ("关键发现" in norm)
+        keywords = ["维度", "关键发现", "维度分析", "维度拆解", "维度表现"]
+        return any(k in norm for k in keywords)
 
     def _is_cause_title(norm: str) -> bool:
-        return "原因" in norm
+        keywords = ["原因", "归因", "成因"]
+        return any(k in norm for k in keywords)
 
     def _is_advice_title(norm: str) -> bool:
-        return "建议" in norm
+        keywords = ["建议", "策略", "行动", "举措"]
+        return any(k in norm for k in keywords)
 
     seq: List[Tuple[str, int, str]] = []
     used = set()

@@ -553,8 +553,8 @@ def _build_trend_dim_table_texts(dimension_summaries: List[Dict[str, Any]], metr
             lines.append(f"{idx}. {name}：占比{share:.2f}%；趋势{trend}；波动标准差{std:.2f}，变异系数{coef:.2f}")
             sign = "+" if growth_val > 0 else ""
             lines.append(f"   - 首末期变化：{sign}{_format_metric_value(metric, growth_val)}")
-            lines.append(f"   - 净增长贡献率（带符号）：{contrib_signed:+.2f}%")
-            lines.append(f"   - 影响贡献率（绝对值）：{contrib_abs:.2f}%")
+            lines.append(f"   - 对该维度总净增长的贡献率（带符号）：{contrib_signed:+.2f}%")
+            lines.append(f"   - 对该维度总变化的影响率（绝对值）：{contrib_abs:.2f}%")
 
             if max_growth:
                 lines.append(
@@ -643,15 +643,21 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
         top5_share = sum(v for _, v in sorted_totals[:5]) / total_all * 100 if total_all else 0.0
         topN_share = sum(v for _, v in sorted_totals[:top_n]) / total_all * 100 if total_all else 0.0
 
-        cat_growths = []
-        for s in dim_block.get("series", []):
+        # 全量类别序列：只用于计算“该维度总数据”的增长贡献率与影响率
+        all_series = dim_block.get("allSeries") or []
+        all_cat_growth_map = {}
+
+        for s in all_series:
+            label = s.get("label")
             data = s.get("data") or []
             cat_growth = (_safe_float(data[-1].get("y")) - _safe_float(data[0].get("y"))) if data else 0.0
-            cat_growths.append(cat_growth)
+            all_cat_growth_map[label] = cat_growth
 
-        total_abs_growth = sum(abs(g) for g in cat_growths)
+        dim_net_growth_total = sum(all_cat_growth_map.values())
+        dim_total_abs_growth = sum(abs(v) for v in all_cat_growth_map.values())
+
         categories = []
-        for idx, s in enumerate(dim_block.get("series", [])):
+        for s in dim_block.get("series", []):   # 这里只展示 TopN
             label = s.get("label")
             data = s.get("data") or []
             v = [_safe_float(p.get("y")) for p in data]
@@ -659,11 +665,11 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
             min_growth_cat = _min_growth_period(data)
             peak_valley_cat = _extract_peak_valley(data)
             share_pct = (totals_map.get(label, 0.0) / total_all * 100) if total_all else 0.0
-            net_growth_total = sum(cat_growths)
 
-            cat_growth = cat_growths[idx] if idx < len(cat_growths) else 0.0
-            growth_contrib_signed = (cat_growth / net_growth_total * 100) if net_growth_total else 0.0
-            growth_contrib_abs = (abs(cat_growth) / total_abs_growth * 100) if total_abs_growth else 0.0
+            cat_growth = all_cat_growth_map.get(label, 0.0)
+
+            growth_contrib_signed = (cat_growth / dim_net_growth_total * 100) if dim_net_growth_total else 0.0
+            growth_contrib_abs = (abs(cat_growth) / dim_total_abs_growth * 100) if dim_total_abs_growth else 0.0
 
             categories.append({
                 "name": label,
@@ -687,7 +693,9 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
             "topSharePct": topN_share,
             "top3SharePct": top3_share,
             "top5SharePct": top5_share,
-            "topN": top_n
+            "topN": top_n,
+            "dimensionNetGrowthTotal": dim_net_growth_total,
+            "dimensionAbsGrowthTotal": dim_total_abs_growth
         })
 
     overview_sentence = f"{metric_label}趋势范围：{since or 'N/A'} ~ {until or 'N/A'}，时间粒度为{gran_label}，整体趋势{trend_direction}。"
@@ -709,7 +717,6 @@ def _build_trend_llm_summary(metric: str, metric_label: str, granularity: str, g
         "dimensionsSummary": dim_summaries,
         "natural_fragments": {"overview_sentence": overview_sentence}
     }
-
 
 def _build_metric_semantics(metric: str) -> Dict[str, str]:
     cfg = METRICS.get(metric, {})
@@ -933,17 +940,28 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             dimension_series = []
             for dim in [d for d in dims if d != "total"]:
                 sql, params = build_dimension_trend(metric, granularity, dim, since, until)
-                dim_rows = run_query(sql, params)
-                totals_info = _compute_dim_totals(dim_rows, dim)
-                top_categories = select_top_categories(dim_rows, dim, top_n)
+                all_dim_rows = run_query(sql, params)
+
+                totals_info = _compute_dim_totals(all_dim_rows, dim)
+                top_categories = select_top_categories(all_dim_rows, dim, top_n)
+
+                display_dim_rows = all_dim_rows
                 if top_categories:
-                    dim_rows = [r for r in dim_rows if r.get(dim) in top_categories]
-                series_by_dim = build_series_by_dimension(dim_rows, dim, granularity, periods=periods if periods else None)
+                    display_dim_rows = [r for r in all_dim_rows if r.get(dim) in top_categories]
+
+                all_series_by_dim = build_series_by_dimension(
+                    all_dim_rows, dim, granularity, periods=periods if periods else None
+                )
+                display_series_by_dim = build_series_by_dimension(
+                    display_dim_rows, dim, granularity, periods=periods if periods else None
+                )
+
                 dimension_series.append({
                     "dimension": dim,
                     "dimensionLabel": DIMENSION_LABELS_CN.get(dim, dim),
                     "topCategories": top_categories,
-                    "series": series_by_dim,
+                    "series": display_series_by_dim,
+                    "allSeries": all_series_by_dim,
                     "categoryTotals": totals_info.get("totals"),
                     "totalAll": totals_info.get("total_all")
                 })

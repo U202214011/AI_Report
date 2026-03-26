@@ -616,11 +616,8 @@
       return;
     }
 
-    messages.push({ role:'user', content: promptText });
+    pushUserVisible(promptText);
     promptBox.textContent = messages[messages.length - 1]?.content || '';
-
-    const { body } = createMsg('assistant', 'content');
-    appendMsgMarkdown(body, '已基于当前筛选生成 Prompt，并发送给模型。你可以继续多轮追问。');
 
     await refreshCtxThrottled(true);
     await runChatSSE();
@@ -641,8 +638,11 @@
     chatLog.innerHTML = '';
     promptBox.textContent = '尚未生成 Prompt';
     plots.innerHTML = '<div class="tiny">尚未生成图表</div>';
-    const { body } = createMsg('assistant', 'content');
-    appendMsgMarkdown(body, '已新建会话。你可以点击“生成并开始对话”。');
+    const notice = document.createElement('div');
+    notice.className = 'tiny';
+    notice.style.cssText = 'text-align:center;padding:20px;color:#6b7280;';
+    notice.textContent = '✨ 新会话已创建，请点击“生成并开始对话”';
+    chatLog.appendChild(notice);
     await refreshCtxThrottled(true);
   });
 
@@ -682,8 +682,11 @@
   });
 
   {
-    const { body } = createMsg('assistant', 'content');
-    appendMsgMarkdown(body, '欢迎使用：左侧配置后生成报告。\n\n- 中栏展示 **先思考、后输出**\n- 左栏可选择模板或少量自定义后导出 DOCX\n- 右栏展示 **Prompt 与图像**');
+    const notice = document.createElement('div');
+    notice.className = 'tiny';
+    notice.style.cssText = 'background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin:10px;';
+    notice.innerHTML = '👋 欢迎使用 Chinook 报告对话工作台<br/><br/><strong>使用步骤：</strong><br/>1️⃣ 左侧配置报告参数<br/>2️⃣ 点击“生成并开始对话”<br/>3️⃣ 中栏查看 LLM 回复<br/>4️⃣ 可继续追问，实现多轮对话';
+    chatLog.appendChild(notice);
   }
 
   loadExportTemplates();

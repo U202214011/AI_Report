@@ -356,6 +356,9 @@ def register_routes(app):
 
         logger.info(f"[/api/chat/sse] payload_keys={list(payload.keys())}")
         logger.info(f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
+        if messages and isinstance(messages, list):
+            last_msg = messages[-1]
+            logger.info(f"[/api/chat/sse] last_message_role={last_msg.get('role')} content_length={len(str(last_msg.get('content', '')))}")
 
         if not isinstance(messages, list) or len(messages) == 0:
             return jsonify({"message": "messages 不能为空"}), 400

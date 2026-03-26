@@ -48,8 +48,10 @@ def stream_glm_chat(
         return
 
     try:
+        print(f"[LLM] API key exists: {bool(api_key)}, length: {len(api_key) if api_key else 0}")
         # ✅ 只保留这一个 client 创建，使用正确的 api_key 变量
         client = ZhipuAiClient(api_key=api_key)
+        print(f"[LLM] Client created successfully")
 
         print(f"[LLM] start model={model}, max_tokens={max_tokens}, temperature={temperature}, thinking_enabled={thinking_enabled}")
         print(f"[LLM] messages_count={len(messages)}")
@@ -84,6 +86,9 @@ def stream_glm_chat(
             # 如果需要排查字段，打开下一行
             # print(f"[LLM] raw_chunk={chunk}")
 
+            if chunk_count <= 3:
+                print(f"[LLM] chunk#{chunk_count} available_attrs={[a for a in dir(chunk) if not a.startswith('_')]}")
+
             if not getattr(chunk, "choices", None):
                 continue
 
@@ -101,7 +106,7 @@ def stream_glm_chat(
 
         # 如果流式没有任何内容，则回退非流式
         if content_chars == 0 and reasoning_chars == 0:
-            print("[LLM] stream empty, fallback to non-stream response")
+            print("[LLM] stream empty, fallback to non-stream response (check API key and model support)")
             fallback_kwargs = dict(request_kwargs)
             fallback_kwargs["stream"] = False
             response = client.chat.completions.create(**fallback_kwargs)

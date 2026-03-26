@@ -31,7 +31,7 @@ def granularity_expression(gran: str) -> str:
         return f"DATE_FORMAT({dt}, '%Y')"
     raise ValueError(f"unknown granularity: {gran}")
 
-# 统一口径(B)：sales_amount ��用行金额
+# 统一口径(B)：sales_amount
 def metric_sql(metric: str) -> str:
     cfg = METRICS.get(metric)
     if not cfg:

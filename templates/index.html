@@ -54,6 +54,30 @@
       .layout{ grid-template-columns: 340px 1fr; }
       .col-preview{ grid-column: 1 / -1; border-top:1px solid var(--line); border-left:none !important; height:45vh; }
     }
+
+    /* Query Preview Modal */
+    .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:none; align-items:center; justify-content:center; }
+    .modal-overlay.open{ display:flex; }
+    .modal-box{ background:#fff; border-radius:12px; width:90vw; max-width:1100px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #e5e7eb; flex-shrink:0; }
+    .modal-head h3{ margin:0; font-size:1rem; }
+    .modal-close{ background:none; color:#6b7280; font-size:1.3rem; padding:0 8px; height:auto; line-height:1; }
+    .modal-close:hover{ color:#111; }
+    .modal-body{ flex:1; overflow:auto; padding:16px; }
+    .query-block{ margin-bottom:24px; }
+    .query-block h4{ margin:0 0 8px; font-size:.95rem; color:#1f2937; }
+    .sql-box{ background:#0b1020; color:#e5e7eb; padding:12px; border-radius:8px; font-family:ui-monospace,Menlo,Monaco,"Courier New",monospace; font-size:.82rem; white-space:pre-wrap; word-break:break-all; margin-bottom:6px; }
+    .query-params{ font-size:.8rem; color:#6b7280; margin-bottom:8px; }
+    .data-table-wrap{ max-height:320px; overflow:auto; border:1px solid #e5e7eb; border-radius:8px; }
+    .data-table{ width:100%; border-collapse:collapse; font-size:.82rem; }
+    .data-table th{ position:sticky; top:0; background:#f3f4f6; border-bottom:2px solid #d1d5db; padding:6px 10px; text-align:left; white-space:nowrap; }
+    .data-table td{ padding:5px 10px; border-bottom:1px solid #f0f0f0; }
+    .data-table tr:hover td{ background:#f9fafb; }
+    .data-table td.num{ text-align:right; }
+    .query-count{ font-size:.78rem; color:#6b7280; margin-top:4px; }
+    .btn-preview{ background:#16a34a; margin-top:6px; width:100%; }
+    .btn-preview:hover{ background:#15803d; }
+    .modal-loading{ text-align:center; padding:40px; color:#6b7280; }
   </style>
 </head>
 <body>
@@ -117,6 +141,7 @@
         <button id="genBtn" style="flex:1;">生成并开始对话</button>
         <button id="newBtn" class="btn2">新会话</button>
       </div>
+      <button id="previewBtn" class="btn-preview">📊 显示数据查询结果</button>
 
       <label class="toggle">
         <input type="checkbox" id="showReasoning" checked /> 显示思考过程（reasoning）
@@ -230,7 +255,18 @@
   </section>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- Query Preview Modal -->
+<div id="queryModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>📊 数据查询结果预览</h3>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <div class="modal-loading">加载中...</div>
+    </div>
+  </div>
+</div>
 <script>
   let messages = [];
   let sending = false;
@@ -680,6 +716,80 @@
     clearTimeout(ctxCheckTimer);
     ctxCheckTimer = setTimeout(() => refreshCtxThrottled(false), 800);
   });
+
+  // Query Preview Modal
+  (function() {
+    const modal = document.getElementById('queryModal');
+    const modalBody = document.getElementById('modalBody');
+
+    function openModal() { modal.classList.add('open'); }
+    function closeModal() { modal.classList.remove('open'); }
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    function fmtVal(v) {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
+      return String(v);
+    }
+
+    function renderQueryBlock(q, idx) {
+      const colsHtml = (q.columns || []).map(c => `<th>${escapeHtml(c)}</th>`).join('');
+      const rowsHtml = (q.rows || []).map(r => {
+        const cells = (q.columns || []).map(c => {
+          const v = r[c];
+          const isNum = typeof v === 'number';
+          return `<td class="${isNum ? 'num' : ''}">${escapeHtml(fmtVal(v))}</td>`;
+        }).join('');
+        return `<tr>${cells}</tr>`;
+      }).join('');
+      const paramsHtml = q.params && q.params.length
+        ? `<div class="query-params">参数: [${q.params.map(p => escapeHtml(String(p))).join(', ')}]</div>`
+        : '';
+      return `
+        <div class="query-block">
+          <h4>${idx + 1}. ${escapeHtml(q.label || '')}</h4>
+          <div class="sql-box">${escapeHtml(q.sql || '')}</div>
+          ${paramsHtml}
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead><tr>${colsHtml}</tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+          <div class="query-count">共 ${(q.rows || []).length} 行数据</div>
+        </div>`;
+    }
+
+    document.getElementById('previewBtn').addEventListener('click', async () => {
+      openModal();
+      modalBody.innerHTML = '<div class="modal-loading">查询中，请稍候...</div>';
+
+      try {
+        const p = payload();
+        const res = await fetch('/api/query-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(p)
+        });
+        const j = await res.json();
+        if (!res.ok || j.message) {
+          modalBody.innerHTML = `<div class="modal-loading" style="color:#dc2626;">错误：${escapeHtml(j.message || '请求失败')}</div>`;
+          return;
+        }
+        const queries = j.queries || [];
+        if (!queries.length) {
+          modalBody.innerHTML = '<div class="modal-loading">无查询结果，请检查筛选配置。</div>';
+          return;
+        }
+        modalBody.innerHTML = queries.map((q, i) => renderQueryBlock(q, i)).join('');
+      } catch (e) {
+        modalBody.innerHTML = `<div class="modal-loading" style="color:#dc2626;">请求失败: ${escapeHtml(e.message || String(e))}</div>`;
+      }
+    });
+  })();
 
   {
     const notice = document.createElement('div');

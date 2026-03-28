@@ -20,7 +20,8 @@ from report_service import (
     select_top_categories,
     build_series_by_dimension,
     generate_pie_chart,
-    normalize_time_range_for_debug
+    normalize_time_range_for_debug,
+    build_aggregation_query,
 )
 from llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
 from export_service import (
@@ -52,17 +53,14 @@ CONTEXT_DANGER_RATIO = 0.92
 
 _UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 
-
 def _has_unresolved_placeholders(text: str) -> bool:
     return bool(_UNRESOLVED_PLACEHOLDER_RE.search(text or ""))
-
 
 def _safe_float(v):
     try:
         return float(v or 0)
     except Exception:
         return 0.0
-
 
 def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
     prompt_data = raw_output.get("promptData") or {}
@@ -110,7 +108,6 @@ def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
         }
     }
 
-
 def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -> dict:
     ratio = used_tokens / limit_tokens if limit_tokens > 0 else 0
     if ratio >= CONTEXT_DANGER_RATIO:
@@ -130,18 +127,14 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
         "ratio": round(ratio, 4)
     }
 
-
 def _sse(event: str, data) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
+    return f"event: {event}\ndata: {{json.dumps(data, ensure_ascii=False)}}\n\n"
 
 def _sse_message(data) -> str:
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-
+    return f"data: {{json.dumps(data, ensure_ascii=False)}}\n\n"
 
 def _log_sse_chunk(route_name: str, idx: int, chunk_type: str, content: str):
-    logger.info(f"[{route_name}] chunk#{idx} type={chunk_type} len={len(content or '')}")
-
+    logger.info(f"[{{route_name}}] chunk#{{idx}} type={{chunk_type}} len={{len(content or '')}}")
 
 def _build_preview_html(report_title: str, report_markdown: str, template_cfg: dict) -> str:
     fonts = template_cfg.get("fonts", {})
@@ -157,17 +150,16 @@ def _build_preview_html(report_title: str, report_markdown: str, template_cfg: d
 
     return f"""
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-      <div style="margin:{margins[0]}cm {margins[1]}cm {margins[2]}cm {margins[3]}cm;">
-        <h1 style="margin:0 0 10px 0;font-family:{h1_font.get('family','微软雅黑')};font-size:{h1_font.get('size_pt',15)}pt;">
-          {safe_title}
+      <div style="margin:{{margins[0]}}cm {{margins[1]}}cm {{margins[2]}}cm {{margins[3]}}cm;">
+        <h1 style="margin:0 0 10px 0;font-family:{{h1_font.get('family','微软雅黑')}};font-size:{{h1_font.get('size_pt',15)}}pt;">
+          {{safe_title}}
         </h1>
-        <div style="font-family:{body_font.get('family','宋体')};font-size:{body_font.get('size_pt',11)}pt;line-height:{line_spacing};">
-          {safe_text}
+        <div style="font-family:{{body_font.get('family','宋体')}};font-size:{{body_font.get('size_pt',11)}}pt;line-height:{{line_spacing}};">
+          {{safe_text}}
         </div>
       </div>
     </div>
     """
-
 
 def register_routes(app):
 
@@ -179,26 +171,26 @@ def register_routes(app):
 
         if dim_key == "total":
             if chart_kind == "line":
-                return f"{dim_label} {gran} 趋势"
+                return f"{{dim_label}} {{gran}} 趋势"
             if chart_kind == "bar":
-                return f"{dim_label} {gran} 柱状图"
+                return f"{{dim_label}} {{gran}} 柱状图"
             if chart_kind == "pie":
-                return f"{dim_label} 饼图"
-            return f"{dim_label} 图表"
+                return f"{{dim_label}} 饼图"
+            return f"{{dim_label}} 图表"
 
         if report_type == "statistical":
             if chart_kind == "bar":
-                return f"{dim_label} 统计柱状图 Top{top_n} + 其他"
+                return f"{{dim_label}} 统计柱状图 Top{{top_n}} + 其他"
             if chart_kind == "pie":
-                return f"{dim_label} 饼图 Top{top_n} + 其他"
+                return f"{{dim_label}} 饼图 Top{{top_n}} + 其他"
 
         if report_type == "trend":
             if chart_kind == "line":
-                return f"{dim_label} {gran} 趋势 Top{top_n}"
+                return f"{{dim_label}} {{gran}} 趋势 Top{{top_n}}"
             if chart_kind == "bar":
-                return f"{dim_label} {gran} 柱状图 Top{top_n}"
+                return f"{{dim_label}} {{gran}} 柱状图 Top{{top_n}}"
 
-        return f"{dim_label} 图表"
+        return f"{{dim_label}} 图表"
 
     def _make_plot(
         *,
@@ -246,7 +238,7 @@ def register_routes(app):
             chart_kind = str(meta.get("chart_kind") or "chart").strip().lower()
             scope = str(meta.get("scope") or ("overview" if dim_key == "total" else "dimension")).strip().lower()
 
-            image_key = f"{scope}__{dim_key}__{chart_kind}__{idx}"
+            image_key = f"{{scope}}__{{dim_key}}__{{chart_kind}}__{{idx}}"
             plot_images[image_key] = plot.get("image")
             plot_images_meta[image_key] = meta
 
@@ -256,12 +248,95 @@ def register_routes(app):
     def index():
         return render_template("index.html")
 
+    @app.route("/api/query-preview", methods=["POST"])
+    def query_preview():
+        """
+        读取用户筛选配置，动态生成 SQL 并执行查询，返回 SQL 语句和查询结果。
+        返回格式: { "queries": [ { "label", "sql", "params", "columns", "rows" } ] }
+        """
+        payload = request.get_json() or {}
+        try:
+            normalized = normalize_request(payload)
+            report_type = normalized["reportType"]
+            metric = normalized["metric"]
+            gran = normalized.get("granularity") or "month"
+            topN = int(normalized.get("topN", 10))
+            since = normalized.get("since")
+            until = normalized.get("until")
+
+            dims = normalized.get("dimensions") or []
+            if not dims:
+                dims = ["total"]
+
+            queries = []
+
+            # --- 总量查询 ---
+            if "total" in dims:
+                sql, params = build_period_trend(metric, gran, since, until)
+                rows = run_query(sql, params)
+                columns = list(rows[0].keys()) if rows else ["period", "value"]
+                queries.append({
+                    "label": "总量趋势查询",
+                    "sql": sql.strip(),
+                    "params": [str(p) for p in params],
+                    "columns": columns,
+                    "rows": rows
+                })
+
+            # --- 各维度查询 ---
+            for dim in [d for d in dims if d != "total"]:
+                dim_label = DIMENSION_TITLES.get(dim, dim)
+
+                if report_type == "statistical":
+                    # 统计型：聚合查询
+                    agg_payload = {
+                        "reportType": "statistical",
+                        "dimensions": [dim],
+                        "metric": metric,
+                        "since": since,
+                        "until": until,
+                        "topN": None,
+                        "filters": {}
+                    }
+                    agg_sql, agg_params = build_aggregation_query(agg_payload)
+                    rows = run_query(agg_sql, agg_params)
+                    # 应用 TopN 筛选
+                    top_categories = select_top_categories(rows, dim, topN)
+                    display_rows = [r for r in rows if r.get(dim) in top_categories]
+                    columns = list(display_rows[0].keys()) if display_rows else [dim, "value"]
+                    queries.append({
+                        "label": f"{{dim_label}} 统计聚合 (Top{{topN}})",
+                        "sql": agg_sql.strip(),
+                        "params": [str(p) for p in agg_params],
+                        "columns": columns,
+                        "rows": display_rows
+                    })
+                else:
+                    # 趋势型：维度趋势查询
+                    sql, params = build_dimension_trend(metric, gran, dim, since, until)
+                    rows = run_query(sql, params)
+                    top_categories = select_top_categories(rows, dim, topN)
+                    display_rows = [r for r in rows if r.get(dim) in top_categories] if top_categories else rows
+                    columns = list(display_rows[0].keys()) if display_rows else ["period", dim, "value"]
+                    queries.append({
+                        "label": f"{{dim_label}} 趋势查询 (Top{{topN}})",
+                        "sql": sql.strip(),
+                        "params": [str(p) for p in params],
+                        "columns": columns,
+                        "rows": display_rows
+                    })
+
+            return jsonify({"queries": queries})
+        except Exception as e:
+            logger.exception(f"[/api/query-preview] error: {{e}}")
+            return jsonify({"message": str(e)}), 500
+
     @app.route("/api/prompt", methods=["POST"])
     def generate_prompt():
         payload = request.get_json() or {}
         try:
             normalized = normalize_request(payload)
-            prompt_bundle = build_prompt_bundle(normalized, plots=[])
+            prompt_bundle = build_prompt_bundle(normalized, plots=[])  
             return jsonify({
                 "prompt": prompt_bundle.get("prompt"),
                 "templateDebug": prompt_bundle.get("templateDebug", {})
@@ -274,7 +349,7 @@ def register_routes(app):
         payload = request.get_json() or {}
         try:
             normalized = normalize_request(payload)
-            prompt_bundle = build_prompt_bundle(normalized, plots=[])
+            prompt_bundle = build_prompt_bundle(normalized, plots=[])  
             prompt_text = prompt_bundle.get("prompt") or ""
 
             def event_stream():
@@ -291,15 +366,15 @@ def register_routes(app):
     def generate_llm_report_sse():
         payload = request.get_json() or {}
         try:
-            logger.info(f"[/api-llm/sse] payload_keys={list(payload.keys())}")
+            logger.info(f"[/api-llm/sse] payload_keys={{list(payload.keys())}}")
 
             normalized = normalize_request(payload)
-            prompt_bundle = build_prompt_bundle(normalized, plots=[])
+            prompt_bundle = build_prompt_bundle(normalized, plots=[])  
             prompt_text = prompt_bundle.get("prompt") or ""
             show_reasoning = bool(payload.get("show_reasoning", True))
 
-            logger.info(f"[/api-llm/sse] normalized={normalized}")
-            logger.info(f"[/api-llm/sse] prompt_len={len(prompt_text)} show_reasoning={show_reasoning}")
+            logger.info(f"[/api-llm/sse] normalized={{normalized}}")
+            logger.info(f"[/api-llm/sse] prompt_len={{len(prompt_text)}} show_reasoning={{show_reasoning}}")
 
             def stream():
                 yield _sse("meta", {"status": "start"})
@@ -316,7 +391,7 @@ def register_routes(app):
                             continue
 
                         if t == "error":
-                            logger.error(f"[/api-llm/sse] model_error={c}")
+                            logger.error(f"[/api-llm/sse] model_error={{c}}")
                             yield _sse("error", {"message": c})
                             break
 
@@ -327,15 +402,15 @@ def register_routes(app):
                             yield _sse("content", {"text": c})
 
                 except Exception as e:
-                    logger.exception(f"[/api-llm/sse] stream exception: {e}")
+                    logger.exception(f"[/api-llm/sse] stream exception: {{e}}")
                     yield _sse("error", {"message": str(e)})
                 finally:
                     yield _sse("meta", {"status": "done"})
-                    logger.info(f"[/api-llm/sse] stream done total_chunks={chunk_idx}")
+                    logger.info(f"[/api-llm/sse] stream done total_chunks={{chunk_idx}}")
 
             return Response(stream(), mimetype="text/event-stream")
         except Exception as e:
-            logger.exception(f"[/api-llm/sse] route exception: {e}")
+            logger.exception(f"[/api-llm/sse] route exception: {{e}}")
             return jsonify({"message": str(e)}), 500
 
     @app.route("/api/chat/context-check", methods=["POST"])
@@ -354,11 +429,11 @@ def register_routes(app):
         system_prompt = payload.get("systemPrompt") or "你是资深数据分析助手，请严格依据给定报告数据进行回答。"
         show_reasoning = bool(payload.get("show_reasoning", True))
 
-        logger.info(f"[/api/chat/sse] payload_keys={list(payload.keys())}")
-        logger.info(f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
+        logger.info(f"[/api/chat/sse] payload_keys={{list(payload.keys())}}")
+        logger.info(f"[/api/chat/sse] messages_count={{(len(messages) if isinstance(messages, list) else -1)}} show_reasoning={{show_reasoning}}")
         if messages and isinstance(messages, list):
             last_msg = messages[-1]
-            logger.info(f"[/api/chat/sse] last_message_role={last_msg.get('role')} content_length={len(str(last_msg.get('content', '')))}")
+            logger.info(f"[/api/chat/sse] last_message_role={{last_msg.get('role')}} content_length={{len(str(last_msg.get('content', '')))}}")
 
         if not isinstance(messages, list) or len(messages) == 0:
             return jsonify({"message": "messages 不能为空"}), 400
@@ -366,7 +441,7 @@ def register_routes(app):
         full_messages = [{"role": "system", "content": system_prompt}] + messages
         used = estimate_messages_tokens(full_messages)
         ctx = _context_status(used, MODEL_CONTEXT_LIMIT)
-        logger.info(f"[/api/chat/sse] context={ctx}")
+        logger.info(f"[/api/chat/sse] context={{ctx}}")
 
         def stream():
             yield _sse("context", ctx)
@@ -385,7 +460,7 @@ def register_routes(app):
                         continue
 
                     if t == "error":
-                        logger.error(f"[/api/chat/sse] model_error={c}")
+                        logger.error(f"[/api/chat/sse] model_error={{c}}")
                         yield _sse("error", {"message": c})
                         break
 
@@ -396,11 +471,11 @@ def register_routes(app):
                         yield _sse("content", {"text": c})
 
             except Exception as e:
-                logger.exception(f"[/api/chat/sse] stream exception: {e}")
+                logger.exception(f"[/api/chat/sse] stream exception: {{e}}")
                 yield _sse("error", {"message": str(e)})
             finally:
                 yield _sse("meta", {"status": "done"})
-                logger.info(f"[/api/chat/sse] stream done total_chunks={chunk_idx}")
+                logger.info(f"[/api/chat/sse] stream done total_chunks={{chunk_idx}}")
 
         return Response(stream(), mimetype="text/event-stream")
 
@@ -641,10 +716,10 @@ def register_routes(app):
 
             prompt_bundle = build_prompt_bundle(normalized, plots=plots)
 
-            logger.info(f"[/api/generate] normalized={normalized}")
-            logger.info(f"[/api/generate] templateDebug={prompt_bundle.get('templateDebug', {})}")
-            logger.info(f"[/api/generate] prompt_len={len(prompt_bundle.get('prompt') or '')}")
-            logger.info(f"[/api/generate] prompt_head={(prompt_bundle.get('prompt') or '')[:300]}")
+            logger.info(f"[/api/generate] normalized={{normalized}}")
+            logger.info(f"[/api/generate] templateDebug={{prompt_bundle.get('templateDebug', {})}}")
+            logger.info(f"[/api/generate] prompt_len={{len(prompt_bundle.get('prompt') or '')}}")
+            logger.info(f"[/api/generate] prompt_head={{(prompt_bundle.get('prompt') or '')[:300]}}")
 
             raw_output = {
                 "meta": {
@@ -726,102 +801,86 @@ def register_routes(app):
     def export_template_preview_docx():
         payload = request.get_json() or {}
         template_config = payload.get("template_config") or {}
-        report_title = (payload.get("report_title") or "").strip() or "模板预览"
-        report_markdown = (payload.get("report_markdown") or "").strip()
-
-        if not report_markdown:
-            report_markdown = "# 模板预览\n\n这是一段正文预览。"
-
-        if not isinstance(template_config, dict) or not template_config:
-            return jsonify({"message": "template_config 不能为空"}), 400
+        report_title = (payload.get("report_title") or "").strip() or "模板预览标题"
+        report_markdown = (payload.get("report_markdown") or "").strip() or "这是模板预览正文。\n\n## 二级标题\n\n正文段落内容示例。"
 
         try:
-            docx_bytes = render_markdown_to_docx_bytes(
-                markdown_text=report_markdown,
-                template_cfg=template_config,
+            buf = render_markdown_to_docx_bytes(
+                report_markdown=report_markdown,
+                template_config=template_config,
                 report_title=report_title,
-                images={}
+                plot_images={},
+                plot_images_meta={},
+                selected_dimensions=[]
             )
-            return Response(
-                docx_bytes,
+            return send_file(
+                BytesIO(buf),
+                as_attachment=True,
+                download_name="template_preview.docx",
                 mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         except Exception as e:
-            logger.exception("[PREVIEW_DOCX] failed: %s", e)
+            logger.exception("[EXPORT_TEMPLATE_PREVIEW_DOCX] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
+
+    @app.route("/api/export/template/preview-html", methods=["POST"])
+    def export_template_preview_html():
+        payload = request.get_json() or {}
+        template_config = payload.get("template_config") or {}
+        report_title = (payload.get("report_title") or "").strip() or "模板预览标题"
+        report_markdown = (payload.get("report_markdown") or "").strip() or "这是模板预览正文。"
+        try:
+            html_str = _build_preview_html(report_title, report_markdown, template_config)
+            return jsonify({"html": html_str})
+        except Exception as e:
+            logger.exception("[EXPORT_TEMPLATE_PREVIEW_HTML] failed: %s", e)
             return jsonify({"message": str(e)}), 500
 
     @app.route("/api/export/report", methods=["POST"])
     def export_report():
         payload = request.get_json() or {}
-        markdown_text = (payload.get("report_markdown") or "").strip()
-        template_id = payload.get("template_id") or "cn_management_a4"
-        template_config = payload.get("template_config")
-        report_title = (payload.get("report_title") or "").strip() or "数据分析报告"
-
-        plot_images = payload.get("plot_images") or {}
-        plot_images_meta = payload.get("plot_images_meta") or {}
-
-        plots_payload = payload.get("plots") or []
-        built_plot_images = {}
-        built_plot_images_meta = {}
-
-        if isinstance(plots_payload, list) and plots_payload:
-            built_plot_images, built_plot_images_meta = _build_plot_images_and_meta(plots_payload)
-
-        if not plot_images and built_plot_images:
-            plot_images = built_plot_images
-
-        if not plot_images_meta and built_plot_images_meta:
-            plot_images_meta = built_plot_images_meta
-
-        selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
-        selected_dimensions = build_selected_dimensions(selected_dim_keys)
-
-        if not markdown_text:
+        report_markdown = (payload.get("report_markdown") or "").strip()
+        if not report_markdown:
             return jsonify({"message": "report_markdown 不能为空"}), 400
 
+        template_id = payload.get("template_id")
+        template_config = payload.get("template_config")
+        report_title = (payload.get("report_title") or "").strip() or "Chinook 数据分析报告"
+        plot_images = payload.get("plot_images") or {}
+        plot_images_meta = payload.get("plot_images_meta") or {}
+        selected_dimensions = payload.get("selected_dimensions") or []
+
         try:
-            markdown_text, inject_debug = inject_placeholders_by_sections(
-                markdown_text=markdown_text,
-                images=plot_images,
-                image_meta=plot_images_meta,
+            if template_config and isinstance(template_config, dict):
+                cfg = template_config
+            elif template_id:
+                cfg = load_template_config(template_id)
+            else:
+                cfg = load_template_config("cn_management_a4")
+
+            report_markdown = inject_placeholders_by_sections(
+                report_markdown,
+                plot_images=plot_images,
+                plot_images_meta=plot_images_meta,
                 selected_dimensions=selected_dimensions
             )
 
-            logger.info("[EXPORT][main_sections] %s", inject_debug.get("main_sections"))
-            logger.info("[EXPORT][dimension_sections] %s", inject_debug.get("dimension_sections"))
-
-            for item in inject_debug.get("inserted", []):
-                logger.info(
-                    "[EXPORT][inserted] key=%s section=%s insert_after_line=%s actual_placeholder_line=%s",
-                    item.get("key"),
-                    item.get("section"),
-                    item.get("insert_after_line"),
-                    item.get("actual_placeholder_line")
-                )
-
-            if inject_debug.get("unmatched_to_appendix"):
-                logger.warning("[EXPORT][appendix_fallback] keys=%s", inject_debug.get("unmatched_to_appendix"))
-
-            if template_config and isinstance(template_config, dict):
-                cfg = template_config
-            else:
-                cfg = load_template_config(template_id)
-
-            docx_bytes = render_markdown_to_docx_bytes(
-                markdown_text=markdown_text,
-                template_cfg=cfg,
+            buf = render_markdown_to_docx_bytes(
+                report_markdown=report_markdown,
+                template_config=cfg,
                 report_title=report_title,
-                images=plot_images
+                plot_images=plot_images,
+                plot_images_meta=plot_images_meta,
+                selected_dimensions=selected_dimensions
             )
+            filename = build_export_filename(report_title, cfg.get("id", "report"))
 
-            filename = build_export_filename(prefix=report_title, ext="docx")
             return send_file(
-                BytesIO(docx_bytes),
-                mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                BytesIO(buf),
                 as_attachment=True,
-                download_name=filename
+                download_name=filename,
+                mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         except Exception as e:
-            logger.exception("[EXPORT] failed: %s", e)
+            logger.exception("[EXPORT_REPORT] failed: %s", e)
             return jsonify({"message": str(e)}), 500

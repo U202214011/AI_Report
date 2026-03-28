@@ -11,6 +11,7 @@ from prompt_data import build_prompt_bundle
 from report_service import (
     build_period_trend,
     build_dimension_trend,
+    build_aggregation_query,
     build_period_range,
     build_total_series,
     run_query,
@@ -671,6 +672,77 @@ def register_routes(app):
             return jsonify(adapt_report_output(raw_output))
         except Exception as e:
             return jsonify(adapt_report_output({"message": str(e)})), 500
+
+    @app.route("/api/query-preview", methods=["POST"])
+    def query_preview():
+        try:
+            payload = request.get_json() or {}
+            normalized = normalize_request(payload)
+
+            metric = normalized["metric"]
+            gran = normalized["granularity"]
+            since = normalized["since"]
+            until = normalized["until"]
+            dims = normalized["dimensions"]
+            report_type = normalized["reportType"]
+            topN = normalized["topN"]
+
+            queries = []
+
+            if "total" in dims:
+                sql, params = build_period_trend(metric, gran, since, until)
+                rows = run_query(sql, params)
+                columns = list(rows[0].keys()) if rows else []
+                queries.append({
+                    "label": "总量趋势",
+                    "sql": sql.strip(),
+                    "params": [str(p) for p in params],
+                    "columns": columns,
+                    "rows": [{k: (float(v) if hasattr(v, '__float__') and not isinstance(v, str) else str(v) if v is not None else None) for k, v in r.items()} for r in rows]
+                })
+
+            for dim in [d for d in dims if d != "total"]:
+                dim_label = DIMENSION_TITLES.get(dim, dim)
+                if report_type == "statistical":
+                    agg_payload = {
+                        "reportType": "statistical",
+                        "dimensions": [dim],
+                        "metric": metric,
+                        "since": since,
+                        "until": until,
+                    }
+                    sql, params = build_aggregation_query(agg_payload)
+                    rows = run_query(sql, params)
+                    top_cats = select_top_categories(rows, dim, topN)
+                    if top_cats:
+                        rows = [r for r in rows if r.get(dim) in top_cats]
+                    columns = list(rows[0].keys()) if rows else []
+                    queries.append({
+                        "label": f"{dim_label} 维度统计",
+                        "sql": sql.strip(),
+                        "params": [str(p) for p in params],
+                        "columns": columns,
+                        "rows": [{k: (float(v) if hasattr(v, '__float__') and not isinstance(v, str) else str(v) if v is not None else None) for k, v in r.items()} for r in rows]
+                    })
+                else:
+                    sql, params = build_dimension_trend(metric, gran, dim, since, until)
+                    rows = run_query(sql, params)
+                    top_cats = select_top_categories(rows, dim, topN)
+                    if top_cats:
+                        rows = [r for r in rows if r.get(dim) in top_cats]
+                    columns = list(rows[0].keys()) if rows else []
+                    queries.append({
+                        "label": f"{dim_label} 维度趋势",
+                        "sql": sql.strip(),
+                        "params": [str(p) for p in params],
+                        "columns": columns,
+                        "rows": [{k: (float(v) if hasattr(v, '__float__') and not isinstance(v, str) else str(v) if v is not None else None) for k, v in r.items()} for r in rows]
+                    })
+
+            return jsonify({"queries": queries})
+        except Exception as e:
+            logger.exception("[/api/query-preview] failed: %s", e)
+            return jsonify({"message": str(e)}), 500
 
     @app.route("/api/export/templates", methods=["GET"])
     def export_templates():

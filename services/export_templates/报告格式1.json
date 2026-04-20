@@ -1,31 +1,31 @@
 {
-  "id": "01",
-  "name": "我的模板",
-  "description": "模板配置中心保存",
+  "id": "cn_management_a4",
+  "name": "内置模板1",
+  "description": "蓝色标题",
   "page": {
     "size": "A4",
     "orientation": "portrait",
     "margin_cm": [
-      2.8,
-      2.4,
-      2.6,
-      2.4
+      2.5,
+      2.2,
+      2.5,
+      2.2
     ]
   },
   "fonts": {
     "title": {
       "family": "微软雅黑",
-      "size_pt": 20,
+      "size_pt": 22,
       "bold": true,
       "italic": false,
-      "color": "#000000"
+      "color": "#4f81bd"
     },
     "h1": {
       "family": "微软雅黑",
       "size_pt": 18,
       "bold": true,
       "italic": false,
-      "color": "#000000"
+      "color": "#4f81bd"
     },
     "h2": {
       "family": "微软雅黑",
@@ -49,15 +49,15 @@
       "color": "#000000"
     },
     "body": {
-      "family": "楷体",
+      "family": "宋体",
       "size_pt": 12,
       "bold": false,
       "italic": false,
       "color": "#000000"
     },
     "list": {
-      "family": "楷体",
-      "size_pt": 12,
+      "family": "宋体",
+      "size_pt": 11,
       "bold": false,
       "italic": false,
       "color": "#000000"
@@ -68,15 +68,15 @@
       "alignment": "center",
       "line_spacing": 2,
       "space_before_pt": 0,
-      "space_after_pt": 20,
+      "space_after_pt": 18,
       "first_line_indent_chars": 0,
       "keep_with_next": true
     },
     "h1": {
       "alignment": "left",
-      "line_spacing": 1.2,
+      "line_spacing": 1.5,
       "space_before_pt": 18,
-      "space_after_pt": 8,
+      "space_after_pt": 6,
       "first_line_indent_chars": 0,
       "keep_with_next": true
     },
@@ -84,7 +84,7 @@
       "alignment": "left",
       "line_spacing": 1.2,
       "space_before_pt": 12,
-      "space_after_pt": 6,
+      "space_after_pt": 4,
       "first_line_indent_chars": 0,
       "keep_with_next": true
     },
@@ -106,7 +106,7 @@
     },
     "body": {
       "alignment": "justify",
-      "line_spacing": 1.5,
+      "line_spacing": 1.2,
       "space_before_pt": 0,
       "space_after_pt": 6,
       "first_line_indent_chars": 2
@@ -121,7 +121,7 @@
   },
   "header_footer": {
     "header": {
-      "text": "AI自动报告",
+      "text": "AI报告自动生成系统",
       "alignment": "center"
     },
     "footer": {
@@ -137,7 +137,7 @@
     "alignment": "center"
   },
   "paragraph": {
-    "line_spacing": 1.5,
+    "line_spacing": 1.2,
     "space_before_pt": 4,
     "space_after_pt": 6,
     "first_line_indent_chars": 2

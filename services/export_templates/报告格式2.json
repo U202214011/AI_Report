@@ -1,15 +1,15 @@
 {
-  "id": "02",
-  "name": "我的模板2",
-  "description": "模板配置中心保存",
+  "id": "cn_professional_report",
+  "name": "内置模板2",
+  "description": "黑色黑体",
   "page": {
     "size": "A4",
     "orientation": "portrait",
     "margin_cm": [
-      2.5,
-      2.2,
-      2.5,
-      2.2
+      2.8,
+      2.4,
+      2.6,
+      2.4
     ]
   },
   "fonts": {
@@ -18,7 +18,7 @@
       "size_pt": 20,
       "bold": true,
       "italic": false,
-      "color": "#4f81bd"
+      "color": "#000029"
     },
     "h1": {
       "family": "微软雅黑",
@@ -29,7 +29,7 @@
     },
     "h2": {
       "family": "微软雅黑",
-      "size_pt": 15,
+      "size_pt": 16,
       "bold": true,
       "italic": false,
       "color": "#000000"
@@ -57,7 +57,7 @@
     },
     "list": {
       "family": "楷体",
-      "size_pt": 11,
+      "size_pt": 12,
       "bold": false,
       "italic": false,
       "color": "#000000"
@@ -66,37 +66,29 @@
   "paragraph_styles": {
     "title": {
       "alignment": "center",
-      "line_spacing": 2.5,
-      "space_before_pt": 0,
-      "space_after_pt": 18,
+      "line_spacing": 2,
+      "space_before_pt": 10,
+      "space_after_pt": 10,
       "first_line_indent_chars": 0,
       "keep_with_next": true
     },
     "h1": {
       "alignment": "left",
-      "line_spacing": 1.2,
+      "line_spacing": 1.5,
       "space_before_pt": 18,
-      "space_after_pt": 6,
+      "space_after_pt": 8,
       "first_line_indent_chars": 0,
       "keep_with_next": true
     },
     "h2": {
       "alignment": "left",
-      "line_spacing": 1.2,
+      "line_spacing": 1.5,
       "space_before_pt": 12,
-      "space_after_pt": 4,
-      "first_line_indent_chars": 0,
+      "space_after_pt": 6,
+      "first_line_indent_chars": 2,
       "keep_with_next": true
     },
     "h3": {
-      "alignment": "left",
-      "line_spacing": 1.2,
-      "space_before_pt": 10,
-      "space_after_pt": 4,
-      "first_line_indent_chars": 0,
-      "keep_with_next": false
-    },
-    "h4": {
       "alignment": "left",
       "line_spacing": 1.2,
       "space_before_pt": 8,
@@ -104,12 +96,20 @@
       "first_line_indent_chars": 0,
       "keep_with_next": false
     },
+    "h4": {
+      "alignment": "left",
+      "line_spacing": 1.2,
+      "space_before_pt": 6,
+      "space_after_pt": 2,
+      "first_line_indent_chars": 0,
+      "keep_with_next": false
+    },
     "body": {
       "alignment": "justify",
-      "line_spacing": 1.5,
+      "line_spacing": 1.2,
       "space_before_pt": 0,
       "space_after_pt": 6,
-      "first_line_indent_chars": 2
+      "first_line_indent_chars": 4
     },
     "list": {
       "alignment": "left",
@@ -121,14 +121,14 @@
   },
   "header_footer": {
     "header": {
-      "text": "",
+      "text": "AI报告自动生成系统",
       "alignment": "center"
     },
     "footer": {
       "show_page_number": true,
       "prefix": "第 ",
       "suffix": " 页",
-      "show_total_pages": false,
+      "show_total_pages": true,
       "alignment": "center"
     }
   },
@@ -137,9 +137,9 @@
     "alignment": "center"
   },
   "paragraph": {
-    "line_spacing": 1.5,
+    "line_spacing": 1.2,
     "space_before_pt": 4,
     "space_after_pt": 6,
-    "first_line_indent_chars": 2
+    "first_line_indent_chars": 4
   }
 }

@@ -4,16 +4,43 @@ import matplotlib
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import io
 import base64
 import logging
+import platform
 from functools import lru_cache
 from config import DB_CONFIG
+
+
+# ========== 中文字体配置 ==========
+def _setup_chinese_font():
+    """根据操作系统自动配置中文字体"""
+    system = platform.system()
+
+    if system == 'Windows':
+        # Windows 优先使用微软雅黑，备选黑体
+        plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'SimSun']
+    elif system == 'Darwin':  # macOS
+        plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC', 'Arial Unicode MS']
+    else:  # Linux
+        plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'DejaVu Sans']
+
+    # 解决负号显示为方框的问题
+    plt.rcParams['axes.unicode_minus'] = False
+
+    # 设置全局字体大小
+    plt.rcParams['font.size'] = 11
+
+
+# 立即执行字体配置
+_setup_chinese_font()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _connection_pool = None
+
 
 def get_db_connection():
     global _connection_pool
@@ -21,7 +48,14 @@ def get_db_connection():
     retry_count = 0
     while retry_count < max_retries:
         try:
-            conn = mysql.connector.connect(**DB_CONFIG)
+            if _connection_pool is None:
+                from mysql.connector.pooling import MySQLConnectionPool
+                _connection_pool = MySQLConnectionPool(
+                    pool_name="mypool",
+                    pool_size=5,
+                    **DB_CONFIG
+                )
+            conn = _connection_pool.get_connection()
             return conn
         except Error as e:
             retry_count += 1
@@ -29,7 +63,8 @@ def get_db_connection():
             if retry_count == max_retries:
                 return None
 
-def fig_to_base64(fig, dpi=100, format='png'):
+
+def fig_to_base64(fig, dpi=150, format='png'):  # 默认 DPI 从 100 提高到 150
     try:
         buf = io.BytesIO()
         fig.savefig(buf, format=format, dpi=dpi, bbox_inches='tight',
@@ -42,6 +77,7 @@ def fig_to_base64(fig, dpi=100, format='png'):
         logger.error(f"图形转换失败: {e}")
         plt.close(fig)
         return None
+
 
 def build_where_clause(config, alias_dict=None):
     conditions = []
@@ -70,6 +106,7 @@ def build_where_clause(config, alias_dict=None):
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     return where_clause, params
+
 
 @lru_cache(maxsize=128)
 def get_cached_data(query, params=None):

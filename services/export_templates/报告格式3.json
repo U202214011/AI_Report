@@ -1,7 +1,7 @@
 {
   "id": "cn_simple_compact",
-  "name": "模板3",
-  "description": "A4宋体/楷体",
+  "name": "内置模板3",
+  "description": "含页眉页脚",
   "page": {
     "size": "A4",
     "margin_cm": [2.0, 1.8, 2.0, 1.8]

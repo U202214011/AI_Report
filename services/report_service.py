@@ -12,10 +12,12 @@ from decimal import Decimal
 from charts.utils import get_db_connection
 from models.schema_config import METRICS, DIMENSIONS, FROM_CLAUSE_SIMPLE, FROM_CLAUSE_FULL, DATE_FIELD
 
+
 # ---------- 时间表达式 ----------
 
 def invoice_datetime_expr() -> str:
     return DATE_FIELD
+
 
 def granularity_expression(gran: str) -> str:
     dt = invoice_datetime_expr()
@@ -31,6 +33,7 @@ def granularity_expression(gran: str) -> str:
         return f"DATE_FORMAT({dt}, '%Y')"
     raise ValueError(f"unknown granularity: {gran}")
 
+
 # 统一口径(B)：sales_amount
 def metric_sql(metric: str) -> str:
     cfg = METRICS.get(metric)
@@ -38,9 +41,11 @@ def metric_sql(metric: str) -> str:
         raise ValueError(f"unknown metric: {metric}")
     return cfg["sql"]
 
+
 # 维度查询口径保持一致
 def metric_sql_with_lines(metric: str) -> str:
     return metric_sql(metric)
+
 
 # ---------- 维度表达式 ----------
 
@@ -50,12 +55,14 @@ def dimension_expression(dimension: str) -> Tuple[str, str]:
         raise ValueError(f"unknown dimension: {dimension}")
     return cfg["expr"], cfg["alias"]
 
+
 # ---------- 时间范围工具 ----------
 
 _YEAR_RE = re.compile(r"^(\d{4})$")
 _MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
 _DAY_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 _QUARTER_RE = re.compile(r"^(\d{4})-Q([1-4])$")
+
 
 def _parse_datetime_input(value: Any) -> Optional[datetime]:
     if value is None:
@@ -93,6 +100,7 @@ def _parse_datetime_input(value: Any) -> Optional[datetime]:
     except Exception:
         return None
 
+
 def _normalize_period_start(granularity: str, dt: datetime) -> datetime:
     if granularity == "day":
         return dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -108,6 +116,7 @@ def _normalize_period_start(granularity: str, dt: datetime) -> datetime:
         return dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     return dt
 
+
 def _period_step(granularity: str):
     if granularity == "day":
         return relativedelta(days=1)
@@ -121,6 +130,7 @@ def _period_step(granularity: str):
         return relativedelta(years=1)
     return relativedelta(days=1)
 
+
 def format_period_label(granularity: str, dt: datetime) -> str:
     if granularity == "month":
         return dt.strftime("%Y-%m")
@@ -130,6 +140,7 @@ def format_period_label(granularity: str, dt: datetime) -> str:
     if granularity == "year":
         return dt.strftime("%Y")
     return dt.strftime("%Y-%m-%d")
+
 
 def build_period_range(granularity: str, since=None, until=None) -> List[str]:
     if not since or not until:
@@ -148,6 +159,7 @@ def build_period_range(granularity: str, since=None, until=None) -> List[str]:
         current = current + step
     return periods
 
+
 def _normalize_since_until(since: Any, until: Any) -> Tuple[Optional[str], Optional[str]]:
     s_dt = _parse_datetime_input(since) if since else None
     u_dt = _parse_datetime_input(until) if until else None
@@ -161,9 +173,11 @@ def _normalize_since_until(since: Any, until: Any) -> Tuple[Optional[str], Optio
     u = u_dt.strftime("%Y-%m-%d %H:%M:%S") if u_dt else None
     return s, u
 
+
 def normalize_time_range_for_debug(since: Any, until: Any) -> Dict[str, Optional[str]]:
     s, u = _normalize_since_until(since, until)
     return {"since": s, "until": u}
+
 
 # ---------- 基础执行 ----------
 
@@ -174,6 +188,7 @@ def _normalize_value(value: Any) -> Any:
         return value.isoformat()
     return value
 
+
 def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for r in rows:
@@ -182,6 +197,7 @@ def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             d[k] = _normalize_value(v)
         out.append(d)
     return out
+
 
 def run_query(sql: str, params: List[Any]) -> List[Dict[str, Any]]:
     conn = get_db_connection()
@@ -193,13 +209,16 @@ def run_query(sql: str, params: List[Any]) -> List[Dict[str, Any]]:
     conn.close()
     return _normalize_rows(rows)
 
+
 # ---------- 趋势查询 ----------
 
 def _invoice_line_from_clause() -> str:
     return FROM_CLAUSE_SIMPLE
 
+
 def _dimension_from_clause() -> str:
     return FROM_CLAUSE_FULL
+
 
 def build_period_trend(metric: str, granularity: str, since=None, until=None) -> Tuple[str, List[Any]]:
     params = []
@@ -231,7 +250,9 @@ def build_period_trend(metric: str, granularity: str, since=None, until=None) ->
     """
     return sql, params
 
-def build_dimension_trend(metric: str, granularity: str, dimension: str, since=None, until=None) -> Tuple[str, List[Any]]:
+
+def build_dimension_trend(metric: str, granularity: str, dimension: str, since=None, until=None) -> Tuple[
+    str, List[Any]]:
     params = []
     where = []
     dt = invoice_datetime_expr()
@@ -262,6 +283,7 @@ def build_dimension_trend(metric: str, granularity: str, dimension: str, since=N
     """
     return sql, params
 
+
 # ---------- 图表工具 ----------
 
 def _encode_png(fig) -> str:
@@ -271,6 +293,7 @@ def _encode_png(fig) -> str:
     buf.seek(0)
     data = buf.read()
     return base64.b64encode(data).decode('ascii')
+
 
 def parse_period(granularity: str, value: Any):
     if value is None:
@@ -315,14 +338,17 @@ def parse_period(granularity: str, value: Any):
         return dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     return dt
 
+
 def normalize_period_label(granularity: str, value: Any) -> str:
     dt = parse_period(granularity, value)
     if dt:
         return format_period_label(granularity, dt)
     return str(value)
 
+
 def sort_periods(periods: List[str], granularity: str) -> List[str]:
     return sorted(periods, key=lambda p: parse_period(granularity, p) or p)
+
 
 def format_value(value: Any) -> str:
     try:
@@ -333,9 +359,14 @@ def format_value(value: Any) -> str:
     except Exception:
         return str(value)
 
+
 def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label: str = "value") -> str:
-    fig, ax = plt.subplots(figsize=(12, 6))
-    for s in series:
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+
+    # 使用ECharts风格的配色
+    colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+
+    for i, s in enumerate(series):
         xs, ys = [], []
         for p in s['data']:
             dt = parse_period(granularity, p.get('x'))
@@ -343,25 +374,55 @@ def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label:
                 xs.append(dt)
                 ys.append(float(p.get('y') or 0))
         if xs:
-            ax.plot(xs, ys, marker='o', label=s.get('label', 'series'))
-    ax.set_xlabel("period")
-    ax.set_ylabel(y_label)
-    ax.legend(loc='best')
+            color = colors[i % len(colors)]
+            # 绘制带阴影的线条
+            ax.plot(xs, ys, marker='o', label=s.get('label', 'series'),
+                    linewidth=3, markersize=8, alpha=0.8, color=color,
+                    shadow=True, markeredgecolor='white', markeredgewidth=2)
+
+    # 设置坐标轴和标题
+    ax.set_xlabel("时间", fontsize=12, fontweight='bold')
+    ax.set_ylabel(y_label, fontsize=12, fontweight='bold')
+    ax.set_title('趋势分析', fontsize=14, pad=20, fontweight='bold')
+
+    # 设置图例
+    ax.legend(loc='upper left', fontsize=10, frameon=True, shadow=True, borderaxespad=1)
+
+    # 设置网格
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+
+    # 设置坐标轴样式
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_color('#333333')
+
+    # 设置刻度
     locator = mdates.AutoDateLocator()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    ax.tick_params(axis='x', labelsize=10)
+    ax.tick_params(axis='y', labelsize=10)
+
+    # 自动调整日期格式
     fig.autofmt_xdate()
+
+    # 调整布局
+    fig.tight_layout()
+
     return _encode_png(fig)
 
+
 def generate_grouped_bar_chart(
-    rows: List[Dict[str, Any]],
-    granularity: str,
-    period_key: str = "period",
-    dim_key: str = "dimension",
-    categories: Optional[List[str]] = None,
-    periods: Optional[List[str]] = None,
-    y_label: str = "value",
-    x_label: Optional[str] = "period"
+        rows: List[Dict[str, Any]],
+        granularity: str,
+        period_key: str = "period",
+        dim_key: str = "dimension",
+        categories: Optional[List[str]] = None,
+        periods: Optional[List[str]] = None,
+        y_label: str = "value",
+        x_label: Optional[str] = "period"
 ) -> str:
     if not rows:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -370,7 +431,8 @@ def generate_grouped_bar_chart(
         return _encode_png(fig)
 
     if periods is None:
-        periods = sort_periods(list({str(r.get(period_key)) for r in rows if r.get(period_key) is not None}), granularity)
+        periods = sort_periods(list({str(r.get(period_key)) for r in rows if r.get(period_key) is not None}),
+                               granularity)
     else:
         periods = [normalize_period_label(granularity, p) for p in periods]
 
@@ -384,34 +446,81 @@ def generate_grouped_bar_chart(
         value = float(r.get("value") or 0)
         values_map.setdefault(dim_val, {})[period_val] = value
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
     x = np.arange(len(periods))
     count = max(len(categories), 1)
     width = 0.8 / count
 
+    # 使用ECharts风格的配色
+    colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+
     for idx, cat in enumerate(categories):
         offsets = x + (idx - (count - 1) / 2) * width
         heights = [values_map.get(cat, {}).get(p, 0) for p in periods]
-        bars = ax.bar(offsets, heights, width, label=str(cat))
+        color = colors[idx % len(colors)]
+
+        # 绘制带阴影的柱状图
+        bars = ax.bar(offsets, heights, width, label=str(cat),
+                      color=color, edgecolor='white', linewidth=2,
+                      alpha=0.8, zorder=2)
+
+        # 添加渐变效果
+        for bar in bars:
+            height = bar.get_height()
+            gradient = plt.cm.get_cmap('viridis')(np.linspace(0, 1, 100))
+            rect = bar.get_bbox()
+            x0 = rect.x0
+            y0 = rect.y0
+            w = rect.width
+            for i, c in enumerate(gradient):
+                ax.fill_between([x0, x0 + w],
+                                [y0 + height * i / 100, y0 + height * i / 100],
+                                [y0 + height * (i + 1) / 100, y0 + height * (i + 1) / 100],
+                                color=c, zorder=1)
+
+        # 添加数据标签
         for bar, height in zip(bars, heights):
             ax.annotate(
                 format_value(height),
                 xy=(bar.get_x() + bar.get_width() / 2, height),
-                xytext=(0, 3),
+                xytext=(0, 8),
                 textcoords="offset points",
                 ha='center',
                 va='bottom',
-                fontsize=8
+                fontsize=9,
+                color='navy',
+                bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='none', alpha=0.7)
             )
 
+    # 设置坐标轴和标题
     if x_label is not None:
-        ax.set_xlabel(x_label)
-    ax.set_ylabel(y_label)
+        ax.set_xlabel(x_label, fontsize=12, fontweight='bold')
+    ax.set_ylabel(y_label, fontsize=12, fontweight='bold')
+    ax.set_title('柱状图分析', fontsize=14, pad=20, fontweight='bold')
+
+    # 设置刻度
     ax.set_xticks(x)
-    ax.set_xticklabels(periods, rotation=45, ha='right')
-    ax.legend(loc='best')
+    ax.set_xticklabels(periods, rotation=45, ha='right', fontsize=10)
+    ax.tick_params(axis='y', labelsize=10)
+
+    # 设置图例
+    ax.legend(loc='upper left', fontsize=10, frameon=True, shadow=True, borderaxespad=1)
+
+    # 设置网格
+    ax.grid(True, linestyle='--', alpha=0.7, zorder=0)
+    ax.set_axisbelow(True)
+
+    # 设置坐标轴样式
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_color('#333333')
+
+    # 调整布局
     fig.tight_layout()
+
     return _encode_png(fig)
+
 
 # ---------- 聚合 ----------
 
@@ -477,6 +586,7 @@ def build_aggregation_query(payload: Dict[str, Any]) -> Tuple[str, List[Any]]:
 
     return sql, params
 
+
 def run_aggregation(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     conn = get_db_connection()
     if not conn:
@@ -494,27 +604,33 @@ def run_aggregation(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     return _normalize_rows(rows)
 
-def select_top_categories(rows: List[Dict[str, Any]], dim_key: str, top_n: int) -> List[Any]:
+
+def select_top_categories(rows: List[Dict[str, Any]], dim_key: str, top_n: int) -> List[str]:
     if not rows:
         return []
-    totals: Dict[Any, float] = {}
+    totals: Dict[str, float] = {}
     for r in rows:
         dim_val = r.get(dim_key)
-        totals[dim_val] = totals.get(dim_val, 0) + float(r.get("value") or 0)
+        # 确保 dim_val 是字符串
+        dim_str = str(dim_val) if dim_val is not None else ""
+        totals[dim_str] = totals.get(dim_str, 0) + float(r.get("value") or 0)
     sorted_items = sorted(totals.items(), key=lambda x: x[1], reverse=True)
     return [k for k, _ in sorted_items[:top_n]] if top_n else [k for k, _ in sorted_items]
 
+
 def build_series_by_dimension(
-    rows: List[Dict[str, Any]],
-    dim_key: str,
-    granularity: str,
-    periods: Optional[List[str]] = None
+        rows: List[Dict[str, Any]],
+        dim_key: str,
+        granularity: str,
+        periods: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     series_map: Dict[str, List[Dict[str, Any]]] = {}
     for r in rows:
         label = r.get(dim_key)
+        # 确保 label 是字符串
+        label_str = str(label) if label is not None else ""
         x_val = normalize_period_label(granularity, r.get("period"))
-        series_map.setdefault(label, []).append({"x": x_val, "y": r.get("value")})
+        series_map.setdefault(label_str, []).append({"x": x_val, "y": r.get("value")})
 
     if periods:
         norm_periods = [normalize_period_label(granularity, p) for p in periods]
@@ -527,10 +643,11 @@ def build_series_by_dimension(
 
     return [{"label": k, "data": v} for k, v in series_map.items()]
 
+
 def build_total_series(
-    rows: List[Dict[str, Any]],
-    granularity: str,
-    periods: Optional[List[str]] = None
+        rows: List[Dict[str, Any]],
+        granularity: str,
+        periods: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     data = [{"x": normalize_period_label(granularity, r.get("period")), "y": r.get("value")} for r in rows]
 
@@ -542,9 +659,47 @@ def build_total_series(
         data.sort(key=lambda p: parse_period(granularity, p.get("x")) or p.get("x"))
     return data
 
+
 def generate_pie_chart(labels: List[str], values: List[float]) -> str:
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
+
+    # 使用ECharts风格的配色
+    colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+
+    # 计算爆炸效果，突出显示前3个
+    explode = [0.05 if i < 3 else 0 for i in range(len(labels))]
+
+    # 绘制带阴影的饼图
+    wedges, texts, autotexts = ax.pie(
+        values,
+        labels=labels,
+        autopct='%1.1f%%',
+        startangle=90,
+        colors=colors,
+        explode=explode,
+        shadow=True,
+        textprops={'fontsize': 10, 'fontweight': 'bold'},
+        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
+    )
+
+    # 设置文本样式
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontsize(9)
+        autotext.set_fontweight('bold')
+        autotext.set_bbox(dict(boxstyle='round,pad=0.3', fc=(0, 0, 0, 0.5), ec='none'))
+
+    # 设置标题
+    ax.set_title('饼图分析', fontsize=14, pad=20, fontweight='bold')
+
+    # 设置图例
+    ax.legend(wedges, labels, loc='center left', bbox_to_anchor=(1, 0.5),
+              fontsize=10, frameon=True, shadow=True, borderaxespad=1)
+
+    # 确保饼图是圆形
     ax.axis('equal')
-    ax.legend(labels, loc='center left', bbox_to_anchor=(1.0, 0.5))
+
+    # 调整布局
+    fig.tight_layout()
+
     return _encode_png(fig)

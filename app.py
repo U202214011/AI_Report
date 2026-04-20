@@ -7,7 +7,8 @@ def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config['DATABASE_URL'] = os.getenv(
         'DATABASE_URL',
-        'mysql+pymysql://user:password@localhost:3306/chinook'
+        # 'mysql+pymysql://user:password@localhost:3306/chinook'
+        'mysql+pymysql://user:password@localhost:13318/chinook'
     )
 
     # 添加这行解决中文乱码

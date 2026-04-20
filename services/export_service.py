@@ -14,7 +14,7 @@ from docx.enum.section import WD_ORIENTATION
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-from schema_config import get_dimension_alias_map, get_dimension_title_map
+from models.schema_config import get_dimension_alias_map, get_dimension_title_map
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "export_templates")
 

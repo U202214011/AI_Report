@@ -2,7 +2,7 @@ from flask import jsonify
 import pandas as pd
 import matplotlib.pyplot as plt
 from .utils import get_db_connection, fig_to_base64, build_where_clause
-from .schema_config import DIMENSIONS
+from models.schema_config import DIMENSIONS
 
 SUPPORTED_DIMENSIONS = [
     key for key in DIMENSIONS.keys()

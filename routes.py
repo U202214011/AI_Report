@@ -5,10 +5,10 @@ import html
 from io import BytesIO
 from flask import request, jsonify, render_template, Response, send_file
 
-from api_adapter import normalize_request
-from report_adapter import adapt_report_output
+from adapters.api_adapter import normalize_request
+from adapters.report_adapter import adapt_report_output
 from prompt_data import build_prompt_bundle
-from report_service import (
+from services.report_service import (
     build_period_trend,
     build_dimension_trend,
     build_aggregation_query,
@@ -23,8 +23,8 @@ from report_service import (
     generate_pie_chart,
     normalize_time_range_for_debug
 )
-from llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
-from export_service import (
+from services.llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
+from services.export_service import (
     list_export_templates,
     load_template_config,
     render_markdown_to_docx_bytes,
@@ -33,7 +33,7 @@ from export_service import (
     save_user_template_config,
     delete_user_template_config,
 )
-from schema_config import (
+from models.schema_config import (
     get_metric_label_map,
     build_selected_dimensions,
     get_dimension_title_map
@@ -464,6 +464,8 @@ def register_routes(app):
                         ))
                     data.extend(rows)
 
+                # 缓存每个维度的查询结果，避免重复查询
+                dim_rows_cache = {}
                 for dim in [d for d in dims if d != "total"]:
                     agg_payload = {
                         "reportType": "statistical",
@@ -475,10 +477,11 @@ def register_routes(app):
                         "filters": {}
                     }
                     rows = run_aggregation(agg_payload)
+                    dim_rows_cache[dim] = rows
                     if rows:
                         top_categories = select_top_categories(rows, dim, topN)
-                        top_rows = [r for r in rows if r.get(dim) in top_categories]
-                        other_value = sum(float(r.get("value") or 0) for r in rows if r.get(dim) not in top_categories)
+                        top_rows = [r for r in rows if str(r.get(dim)) in top_categories]
+                        other_value = sum(float(r.get("value") or 0) for r in rows if str(r.get(dim)) not in top_categories)
                         if other_value > 0:
                             top_rows.append({dim: "其他", "value": other_value})
                             top_categories = top_categories + ["其他"]
@@ -511,20 +514,11 @@ def register_routes(app):
 
                 if SHOW_PIE_IN_STAT:
                     for dim in [d for d in dims if d != "total"]:
-                        pie_payload = {
-                            "reportType": "statistical",
-                            "dimensions": [dim],
-                            "metric": metric,
-                            "since": since,
-                            "until": until,
-                            "topN": None,
-                            "filters": {}
-                        }
-                        rows = run_aggregation(pie_payload)
+                        rows = dim_rows_cache.get(dim, [])
                         if rows:
                             top_categories = select_top_categories(rows, dim, topN)
-                            top_rows = [r for r in rows if r.get(dim) in top_categories]
-                            other_value = sum(float(r.get("value") or 0) for r in rows if r.get(dim) not in top_categories)
+                            top_rows = [r for r in rows if str(r.get(dim)) in top_categories]
+                            other_value = sum(float(r.get("value") or 0) for r in rows if str(r.get(dim)) not in top_categories)
                             if other_value > 0:
                                 top_rows.append({dim: "其他", "value": other_value})
                             labels = [str(r.get(dim)) for r in top_rows]
@@ -596,7 +590,7 @@ def register_routes(app):
                     rows = run_query(sql, params)
                     top_categories = select_top_categories(rows, dim, topN)
                     if top_categories:
-                        rows = [r for r in rows if r.get(dim) in top_categories]
+                        rows = [r for r in rows if str(r.get(dim)) in top_categories]
 
                     series = build_series_by_dimension(rows, dim, granularity=gran, periods=periods_for_chart)
                     if series:

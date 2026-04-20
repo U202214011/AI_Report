@@ -9,8 +9,8 @@ import matplotlib.dates as mdates
 import numpy as np
 import re
 from decimal import Decimal
-from utils import get_db_connection
-from schema_config import METRICS, DIMENSIONS, FROM_CLAUSE_SIMPLE, FROM_CLAUSE_FULL, DATE_FIELD
+from charts.utils import get_db_connection
+from models.schema_config import METRICS, DIMENSIONS, FROM_CLAUSE_SIMPLE, FROM_CLAUSE_FULL, DATE_FIELD
 
 # ---------- 时间表达式 ----------
 

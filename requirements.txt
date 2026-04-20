@@ -1,0 +1,10 @@
+Flask
+pymysql
+mysql-connector-python
+zai-sdk
+python-dotenv
+matplotlib
+python-docx
+python-dateutil
+aiomysql
+pandas

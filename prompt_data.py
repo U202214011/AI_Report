@@ -6,7 +6,7 @@ import numpy as np
 from decimal import Decimal
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from report_service import (
+from services.report_service import (
     build_period_trend,
     build_dimension_trend,
     run_query,
@@ -16,7 +16,7 @@ from report_service import (
     build_series_by_dimension,
     select_top_categories
 )
-from schema_config import METRICS, DIMENSIONS, ROLE_CONTEXT
+from models.schema_config import METRICS, DIMENSIONS, ROLE_CONTEXT
 
 # ---------- 从 schema_config 动态生成映射字典 ----------
 METRIC_LABELS_CN    = {k: v["label_cn"] for k, v in METRICS.items()}
@@ -43,17 +43,19 @@ REPORT_STYLE_MAP = {
     "standard": "standard"
 }
 
+"""
 STYLE_APPENDIX = {
     # 降级为"补充提醒"，主控制放入模板主体
-    "statistical.simple": "【补充提醒】简明分析性：先结论，少铺陈，3-5条要点优先。",
-    "statistical.attribution": "【补充提醒】归因解析型：区分主因/次因，无法验证因果需标注'推测'。",
-    "statistical.forecast": "【补充提醒】预测建议型：给短中期方向、风险触发条件和优先级建议。",
+    "statistical.simple": "【补充提醒】简明分析性：简单阐述数据代表意义，先结论，少铺陈，3-5条要点优先。",
+    "statistical.attribution": "【补充提醒】归因解析型：重点分析数据背后代表的原因和市场分析，区分主因/次因，无法验证因果需标注'推测'。",
+    "statistical.forecast": "【补充提醒】预测建议型：结合数据与市场原因，着重给短中期方向、风险触发条件和优先级建议。",
     "statistical.standard": "【补充提醒】综合标准型：保持概览/发现/原因/建议完整平衡。",
-    "trend.simple": "【补充提醒】简明分析性：先给趋势结论，再列关键拐点。",
-    "trend.attribution": "【补充提醒】归因解析型：强调维度对趋势变化的贡献。",
-    "trend.forecast": "【补充提醒】预测建议型：给趋势判断、风险触发与可执行动作。",
-    "trend.standard": "【补充提醒】综合标准型：覆盖趋势、波动、维度差异与建议。"
+    "trend.simple": "【补充提醒】简明分析性：简单阐述数据代表意义，先给趋势结论，再列关键拐点。",
+    "trend.attribution": "【补充提醒】归因解析型：重点分析数据背后代表的原因和市场分析，对各维度的有代表性的具体类别的趋势做原因分析。",
+    "trend.forecast": "【补充提醒】预测建议型：结合数据与市场原因，着重阐述趋势判断、风险触发与可执行动作的建议与预测结论。",
+    "trend.standard": "【补充提醒】综合标准型：综合覆盖趋势、波动、维度差异与建议。"
 }
+"""
 
 METRIC_MAP = {alias: k for k, v in METRICS.items() for alias in [k, v["label_cn"]]}
 # 补充中文别名（订单量/订单数 等）
@@ -446,12 +448,14 @@ def _build_stat_dimension_summary(dim: str, metric: str, since: Optional[str], u
 
     total_value = _sum_values(rows)
     top_categories = select_top_categories(rows, dim, top_n) or []
-    top_rows = [r for r in rows if r.get(dim) in top_categories] if top_categories else rows[:]
-    other_rows = [r for r in rows if r.get(dim) not in top_categories] if top_categories else []
+    top_rows = [r for r in rows if str(r.get(dim)) in top_categories] if top_categories else rows[:]
+    other_rows = [r for r in rows if str(r.get(dim)) not in top_categories] if top_categories else []
 
     ranking = []
     for r in top_rows:
         name = r.get(dim)
+        if name is not None:
+            name = str(name)  # 确保 name 是字符串
         val = _safe_float(r.get("value"))
         share = (val / total_value * 100.0) if total_value else 0.0
         ranking.append({"name": name, "value": val, "share_pct": share})
@@ -767,10 +771,10 @@ def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
     base = (
         "1) 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
         "2) 一级标题必须严格且按以下顺序输出，名称必须完全一致：\n"
-        "# 概览\n"
-        "# 维度关键发现\n"
-        "# 原因分析\n"
-        "# 建议\n"
+        "# 一、概览\n"
+        "# 二、维度关键发现\n"
+        "# 三、原因分析\n"
+        "# 四、建议\n"
         "3) 除'维度关键发现'外，其他一级标题下不要创建维度型二级标题。\n"
     )
     if selected_dim_titles:
@@ -812,7 +816,9 @@ def _build_report_type_contract(report_type: str) -> Dict[str, str]:
 
 def _build_report_style_contract(report_style: Optional[str]) -> Dict[str, str]:
     style = (report_style or "standard").strip().lower()
-    contracts = {
+
+    # 定义基础字段
+    base_contracts = {
         "simple": {
             "style_name": "简明分析性",
             "writing_goal": "先结论后展开，用最少文字表达最关键发现。",
@@ -846,7 +852,22 @@ def _build_report_style_contract(report_style: Optional[str]) -> Dict[str, str]:
             "language_rule": "专业、完整、稳定。"
         }
     }
-    return contracts.get(style, contracts["standard"])
+
+    contract = base_contracts.get(style, base_contracts["standard"]).copy()
+
+    # 新增：构建风格专属指令文本（将取代 STYLE_APPENDIX）
+    style_instructions = f"""- 风格类型：{contract['style_name']}
+- 写作目标：{contract['writing_goal']}
+- 输出侧重点：{contract['focus_rule']}
+- 推理要求：{contract['reasoning_rule']}
+- 建议要求：{contract['advice_rule']}
+- 语言要求：{contract['language_rule']}
+
+【风格专属指令】
+{contract['style_name']}：{contract['writing_goal']} 具体执行时，{contract['focus_rule']} 在分析原因时，{contract['reasoning_rule']} 提出建议时，{contract['advice_rule']} 整体语言风格要求：{contract['language_rule']}"""
+
+    contract["style_instructions"] = style_instructions
+    return contract
 
 
 def _fallback_template() -> str:
@@ -1031,6 +1052,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
 
         total_series_text = _build_total_series_text((llm_data.get("series") if isinstance(llm_data, dict) else []) or [], metric)
 
+        # 在 build_prompt_bundle 函数中，template_payload 的组装部分
         template_payload = {
             "role_context": role_context,
             "task_definition": task_definition,
@@ -1048,7 +1070,8 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
             "format_requirements": format_requirements,
             "series_granularity_label": gran_label,
             "total_series_text": total_series_text,
-            "markdown_constraints": markdown_constraints
+            "markdown_constraints": markdown_constraints,
+            "style_instructions": report_style_contract.get("style_instructions", "")
         }
 
         templates = load_templates()
@@ -1080,10 +1103,10 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 _TEMPLATE_DEBUG_STATE["selected_template_len"] = len(fallback_tpl)
                 _TEMPLATE_DEBUG_STATE["unresolved_placeholder_count"] = fallback_unresolved
 
-        style_appendix = STYLE_APPENDIX.get(style_key, "")
-        _TEMPLATE_DEBUG_STATE["style_appendix_len"] = len(style_appendix or "")
-        if style_appendix:
-            prompt_text = prompt_text.rstrip() + "\n\n" + style_appendix.strip() + "\n"
+        _TEMPLATE_DEBUG_STATE["style_instructions_included"] = True
+        _TEMPLATE_DEBUG_STATE["style_instructions_len"] = len(
+            (template_payload.get("report_style_contract") or {}).get("style_instructions", "")
+        )
 
         _TEMPLATE_DEBUG_STATE["rendered_prompt_len"] = len(prompt_text or "")
         return {

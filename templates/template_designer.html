@@ -4,851 +4,639 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>模板配置中心</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
   <style>
-    :root{
-      --bg:#f6f8fb; --panel:#fff; --line:#e5e7eb; --text:#111827; --muted:#6b7280;
-      --brand:#2563eb; --ok:#166534; --err:#991b1b;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .layout{display:grid;grid-template-columns:460px 1fr;height:100vh}
-    .left{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:12px}
-    .right{padding:12px;overflow:auto}
-    .card{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px;background:#fbfdff}
-    .card-title{font-weight:600;font-size:13px;margin-bottom:6px;color:var(--brand)}
-    .row{display:flex;gap:6px;align-items:flex-end}.row>*{flex:1}
-    h3{margin:0 0 6px 0}
-    label{display:block;margin-top:6px;font-size:12px;color:var(--muted)}
-    input[type=text],input[type=number],select,textarea{
-      width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font:inherit;background:#fff;font-size:13px
-    }
-    input[type=color]{width:100%;height:32px;padding:2px 4px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer}
-    input[type=checkbox]{width:auto;margin-right:4px;accent-color:var(--brand)}
-    .cb-row{display:flex;align-items:center;gap:12px;margin-top:8px;font-size:13px}
-    textarea{min-height:130px;resize:vertical}
-    button{width:100%;padding:8px;border:none;background:var(--brand);color:#fff;cursor:pointer;border-radius:8px;font:inherit;height:36px}
-    button.secondary{background:#4b5563}
-    button:disabled{opacity:.65;cursor:not-allowed}
-    .tiny{font-size:12px;color:var(--muted)}
-    .status{margin-top:8px;font-size:12px}
-    .status.ok{color:var(--ok)}
-    .status.err{color:var(--err)}
-    #docxPreview{
-      background:#fff;border:1px solid var(--line);border-radius:10px;
-      padding:12px;min-height:700px;overflow:auto;
-    }
-    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
-    .toolbar .leftx{display:flex;gap:8px;align-items:center}
-    .dot{width:8px;height:8px;border-radius:999px;background:#9ca3af;display:inline-block}
-    .dot.live{background:#16a34a}
-    .msg{margin-top:8px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;background:#fff}
-    details>summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--brand);padding:4px 0}
-    @media (max-width: 1100px){
-      .layout{grid-template-columns:1fr}
-      .left{border-right:none;border-bottom:1px solid var(--line)}
+    body { margin: 0; background: #f6f8fb; }
+    .layout { display: grid; grid-template-columns: 460px 1fr; height: 100vh; }
+    .left { overflow: auto; padding: 12px; border-right: 1px solid #e5e7eb; background: #fff; }
+    .right { padding: 12px; overflow: auto; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: #9ca3af; display: inline-block; }
+    .dot.live { background: #16a34a; }
+    #docxPreview { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; min-height: 700px; overflow: auto; }
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before { content: "\25B6 "; font-size: 10px; }
+    details[open] > summary::before { content: "\25BC "; font-size: 10px; }
+    .form-control-color { max-width: 60px; padding: 2px 4px; }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .left { border-right: none; border-bottom: 1px solid #e5e7eb; }
     }
   </style>
 </head>
 <body>
-<div class="layout">
-  <aside class="left">
-    <h3>模板配置中心</h3>
-    <div class="tiny">修改配置后可实时预览 DOCX 渲染效果（docx-preview）</div>
+<div id="app">
+  <div class="layout">
+    <!-- ===== LEFT SIDEBAR ===== -->
+    <aside class="left">
+      <h3 class="fw-bold mb-1">模板配置中心</h3>
+      <p class="text-muted small mb-2">修改配置后可实时预览 DOCX 渲染效果</p>
 
-    <!-- 基本信息 -->
-    <div class="card">
-      <div class="card-title">基本信息</div>
-      <div class="row">
-        <div><label>模板ID</label><input id="tpl_id" value="my_tpl" /></div>
-        <div><label>模板名称</label><input id="tpl_name" value="我的模板" /></div>
-      </div>
-      <label style="margin-top:8px;">加载已有模板</label>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
-        <select id="loadTplSelect" style="flex:1;"><option value="">-- 选择模板 --</option></select>
-        <button id="btnLoadTpl" style="width:auto;padding:0 10px;">加载</button>
-        <button id="btnDeleteTpl" style="width:auto;padding:0 10px;background:#dc2626;" disabled>删除</button>
-      </div>
-    </div>
-
-    <!-- 标题字体 -->
-    <div class="card">
-      <details open>
-        <summary>标题（Title）字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="title_font" value="微软雅黑" /></div>
-          <div><label>字号(pt)</label><input id="title_size" type="number" value="18" /></div>
-          <div><label>颜色</label><input id="title_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="title_bold" type="checkbox" checked />粗体</label>
-          <label><input id="title_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="title_align">
-          <option value="center" selected>居中</option>
-          <option value="left">左对齐</option>
-          <option value="right">右对齐</option>
-          <option value="justify">两端对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="title_lsp" type="number" step="0.1" value="1.2" /></div>
-          <div><label>段前(pt)</label><input id="title_sb" type="number" value="0" /></div>
-          <div><label>段后(pt)</label><input id="title_sa" type="number" value="18" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="title_indent" type="number" value="0" /></div>
-      </details>
-    </div>
-
-    <!-- H1 字体 -->
-    <div class="card">
-      <details open>
-        <summary>H1 字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="h1_font" value="微软雅黑" /></div>
-          <div><label>字号(pt)</label><input id="h1_size" type="number" value="15" /></div>
-          <div><label>颜色</label><input id="h1_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="h1_bold" type="checkbox" checked />粗体</label>
-          <label><input id="h1_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="h1_align">
-          <option value="left" selected>左对齐</option>
-          <option value="center">居中</option>
-          <option value="right">右对齐</option>
-          <option value="justify">两端对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="h1_lsp" type="number" step="0.1" value="1.2" /></div>
-          <div><label>段前(pt)</label><input id="h1_sb" type="number" value="18" /></div>
-          <div><label>段后(pt)</label><input id="h1_sa" type="number" value="6" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="h1_indent" type="number" value="0" /></div>
-      </details>
-    </div>
-
-    <!-- H2 字体 -->
-    <div class="card">
-      <details>
-        <summary>H2 字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="h2_font" value="微软雅黑" /></div>
-          <div><label>字号(pt)</label><input id="h2_size" type="number" value="13" /></div>
-          <div><label>颜色</label><input id="h2_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="h2_bold" type="checkbox" checked />粗体</label>
-          <label><input id="h2_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="h2_align">
-          <option value="left" selected>左对齐</option>
-          <option value="center">居中</option>
-          <option value="right">右对齐</option>
-          <option value="justify">两端对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="h2_lsp" type="number" step="0.1" value="1.2" /></div>
-          <div><label>段前(pt)</label><input id="h2_sb" type="number" value="12" /></div>
-          <div><label>段后(pt)</label><input id="h2_sa" type="number" value="4" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="h2_indent" type="number" value="0" /></div>
-      </details>
-    </div>
-
-    <!-- H3 字体 -->
-    <div class="card">
-      <details>
-        <summary>H3 字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="h3_font" value="微软雅黑" /></div>
-          <div><label>字号(pt)</label><input id="h3_size" type="number" value="12" /></div>
-          <div><label>颜色</label><input id="h3_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="h3_bold" type="checkbox" checked />粗体</label>
-          <label><input id="h3_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="h3_align">
-          <option value="left" selected>左对齐</option>
-          <option value="center">居中</option>
-          <option value="right">右对齐</option>
-          <option value="justify">两端对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="h3_lsp" type="number" step="0.1" value="1.2" /></div>
-          <div><label>段前(pt)</label><input id="h3_sb" type="number" value="10" /></div>
-          <div><label>段后(pt)</label><input id="h3_sa" type="number" value="4" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="h3_indent" type="number" value="0" /></div>
-      </details>
-    </div>
-
-    <!-- H4 字体 -->
-    <div class="card">
-      <details>
-        <summary>H4 字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="h4_font" value="微软雅黑" /></div>
-          <div><label>字号(pt)</label><input id="h4_size" type="number" value="11" /></div>
-          <div><label>颜色</label><input id="h4_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="h4_bold" type="checkbox" checked />粗体</label>
-          <label><input id="h4_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="h4_align">
-          <option value="left" selected>左对齐</option>
-          <option value="center">居中</option>
-          <option value="right">右对齐</option>
-          <option value="justify">两端对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="h4_lsp" type="number" step="0.1" value="1.2" /></div>
-          <div><label>段前(pt)</label><input id="h4_sb" type="number" value="8" /></div>
-          <div><label>段后(pt)</label><input id="h4_sa" type="number" value="4" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="h4_indent" type="number" value="0" /></div>
-      </details>
-    </div>
-
-    <!-- 正文字体 -->
-    <div class="card">
-      <details open>
-        <summary>正文（Body）字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="body_font" value="宋体" /></div>
-          <div><label>字号(pt)</label><input id="body_size" type="number" value="11" /></div>
-          <div><label>颜色</label><input id="body_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="body_bold" type="checkbox" />粗体</label>
-          <label><input id="body_italic" type="checkbox" />斜体</label>
-        </div>
-        <label>对齐</label>
-        <select id="body_align">
-          <option value="justify" selected>两端对齐</option>
-          <option value="left">左对齐</option>
-          <option value="center">居中</option>
-          <option value="right">右对齐</option>
-        </select>
-        <div class="row">
-          <div><label>行距</label><input id="line_spacing" type="number" step="0.1" value="1.5" /></div>
-          <div><label>段前(pt)</label><input id="body_sb" type="number" value="0" /></div>
-          <div><label>段后(pt)</label><input id="body_sa" type="number" value="6" /></div>
-        </div>
-        <div><label>首行缩进(字符)</label><input id="indent_chars" type="number" value="2" /></div>
-      </details>
-    </div>
-
-    <!-- 列表字体 -->
-    <div class="card">
-      <details>
-        <summary>列表（List）字体</summary>
-        <div class="row">
-          <div><label>字体</label><input id="list_font" value="宋体" /></div>
-          <div><label>字号(pt)</label><input id="list_size" type="number" value="11" /></div>
-          <div><label>颜色</label><input id="list_color" type="color" value="#000000" /></div>
-        </div>
-        <div class="cb-row">
-          <label><input id="list_bold" type="checkbox" />粗体</label>
-          <label><input id="list_italic" type="checkbox" />斜体</label>
-        </div>
-      </details>
-    </div>
-
-    <!-- 页面设置 -->
-    <div class="card">
-      <details open>
-        <summary>页面设置</summary>
-        <div class="row">
-          <div>
-            <label>页面尺寸</label>
-            <select id="page_size">
-              <option value="A4" selected>A4</option>
-              <option value="Letter">Letter</option>
-            </select>
+      <!-- 基本信息 -->
+      <div class="card mb-2">
+        <div class="card-body p-2">
+          <div class="card-title text-primary fw-semibold small mb-2">基本信息</div>
+          <div class="row g-2">
+            <div class="col">
+              <label class="form-label small mb-1">模板ID</label>
+              <input v-model="tplId" class="form-control form-control-sm" />
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">模板名称</label>
+              <input v-model="tplName" class="form-control form-control-sm" />
+            </div>
           </div>
-          <div>
-            <label>方向</label>
-            <select id="page_orient">
-              <option value="portrait" selected>纵向</option>
-              <option value="landscape">横向</option>
+          <label class="form-label small mt-2 mb-1">加载已有模板</label>
+          <div class="d-flex gap-2 align-items-center">
+            <select v-model="selectedLoadId" class="form-select form-select-sm flex-grow-1">
+              <option value="">-- 选择模板 --</option>
+              <option v-for="t in tplList" :key="t.id" :value="t.id">
+                [[ t.name || t.id ]][[ t.is_user ? ' ★' : '' ]]
+              </option>
             </select>
+            <button @click="loadTpl" class="btn btn-sm btn-primary" style="white-space:nowrap;">加载</button>
+            <button @click="deleteTpl" :disabled="!canDeleteLoadedTpl" class="btn btn-sm btn-danger" style="white-space:nowrap;">删除</button>
           </div>
         </div>
-        <div class="row">
-          <div><label>上边距(cm)</label><input id="m_top" type="number" step="0.1" value="2.5" /></div>
-          <div><label>右边距(cm)</label><input id="m_right" type="number" step="0.1" value="2.2" /></div>
-        </div>
-        <div class="row">
-          <div><label>下边距(cm)</label><input id="m_bottom" type="number" step="0.1" value="2.5" /></div>
-          <div><label>左边距(cm)</label><input id="m_left" type="number" step="0.1" value="2.2" /></div>
-        </div>
-      </details>
-    </div>
-
-    <!-- 页眉页脚 -->
-    <div class="card">
-      <details>
-        <summary>页眉 / 页脚</summary>
-        <label>页眉文字</label>
-        <input id="header_text" type="text" placeholder="（空=不显示页眉）" />
-        <label>页眉对齐</label>
-        <select id="header_align">
-          <option value="center" selected>居中</option>
-          <option value="left">左对齐</option>
-          <option value="right">右对齐</option>
-        </select>
-        <div class="cb-row" style="margin-top:8px;">
-          <label><input id="footer_pagenum" type="checkbox" checked />显示页码</label>
-          <label><input id="footer_total" type="checkbox" />显示总页数</label>
-        </div>
-        <div class="row">
-          <div><label>页码前缀</label><input id="footer_prefix" value="第 " /></div>
-          <div><label>页码后缀</label><input id="footer_suffix" value=" 页" /></div>
-        </div>
-        <label>页脚对齐</label>
-        <select id="footer_align">
-          <option value="center" selected>居中</option>
-          <option value="left">左对齐</option>
-          <option value="right">右对齐</option>
-        </select>
-      </details>
-    </div>
-
-    <!-- 预览内容 & 操作 -->
-    <div class="card">
-      <label>预览内容 (Markdown)</label>
-      <textarea id="preview_md"># 2026Q1 销售分析报告
-
-## 概览
-本季度销售额同比增长 **12.8%**。
-
-## 维度关键发现
-- 艺术家维度贡献最高
-- 国家维度北美增长明显
-
-## 建议
-1. 深耕高增长区域
-2. 对低增长客户做分层运营</textarea>
-
-      <div class="row" style="margin-top:8px;">
-        <button id="btnPreview">立即预览</button>
-        <button id="btnSave" class="secondary">保存模板</button>
       </div>
 
-      <label style="margin-top:8px;">
-        <input id="autoPreview" type="checkbox" style="width:auto;margin-right:6px;" />
-        自动预览（停止输入后 600ms）
-      </label>
-
-      <div id="status" class="status"></div>
-    </div>
-  </aside>
-
-  <main class="right">
-    <div class="toolbar">
-      <div class="leftx">
-        <span id="liveDot" class="dot"></span>
-        <span class="tiny">DOCX 预览区</span>
+      <!-- 标题字体 -->
+      <div class="card mb-2">
+        <details open>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">标题（Title）字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="title_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="title_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="title_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="title_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="title_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="title_align" class="form-select form-select-sm">
+              <option value="center">居中</option>
+              <option value="left">左对齐</option>
+              <option value="right">右对齐</option>
+              <option value="justify">两端对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="title_lsp" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="title_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="title_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="title_indent" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
       </div>
-      <div class="tiny" id="metaInfo">等待预览...</div>
-    </div>
 
-    <div id="docxPreview"></div>
-    <div id="errorBox" class="msg tiny" style="display:none;"></div>
-  </main>
+      <!-- H1 字体 -->
+      <div class="card mb-2">
+        <details open>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">H1 字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="h1_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="h1_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="h1_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="h1_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="h1_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="h1_align" class="form-select form-select-sm">
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+              <option value="justify">两端对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="h1_lsp" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="h1_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="h1_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="h1_indent" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- H2 字体 -->
+      <div class="card mb-2">
+        <details>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">H2 字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="h2_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="h2_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="h2_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="h2_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="h2_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="h2_align" class="form-select form-select-sm">
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+              <option value="justify">两端对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="h2_lsp" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="h2_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="h2_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="h2_indent" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- H3 字体 -->
+      <div class="card mb-2">
+        <details>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">H3 字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="h3_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="h3_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="h3_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="h3_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="h3_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="h3_align" class="form-select form-select-sm">
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+              <option value="justify">两端对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="h3_lsp" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="h3_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="h3_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="h3_indent" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- H4 字体 -->
+      <div class="card mb-2">
+        <details>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">H4 字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="h4_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="h4_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="h4_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="h4_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="h4_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="h4_align" class="form-select form-select-sm">
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+              <option value="justify">两端对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="h4_lsp" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="h4_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="h4_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="h4_indent" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 正文字体 -->
+      <div class="card mb-2">
+        <details open>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">正文（Body）字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="body_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="body_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="body_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="body_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="body_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+            <label class="form-label small mt-2 mb-1">对齐</label>
+            <select v-model="body_align" class="form-select form-select-sm">
+              <option value="justify">两端对齐</option>
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+            </select>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">行距</label><input v-model.number="line_spacing" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段前(pt)</label><input v-model.number="body_sb" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">段后(pt)</label><input v-model.number="body_sa" type="number" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mt-2"><label class="form-label small mb-1">首行缩进(字符)</label><input v-model.number="indent_chars" type="number" class="form-control form-control-sm" /></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 列表字体 -->
+      <div class="card mb-2">
+        <details>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">列表（List）字体</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col"><label class="form-label small mb-1">字体</label><input v-model="list_font" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">字号(pt)</label><input v-model.number="list_size" type="number" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">颜色</label><input v-model="list_color" type="color" class="form-control form-control-sm form-control-color" /></div>
+            </div>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="list_bold" type="checkbox" class="form-check-input" />粗体</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="list_italic" type="checkbox" class="form-check-input" />斜体</label>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 页面设置 -->
+      <div class="card mb-2">
+        <details open>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">页面设置</summary>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col">
+                <label class="form-label small mb-1">页面尺寸</label>
+                <select v-model="page_size" class="form-select form-select-sm">
+                  <option value="A4">A4</option>
+                  <option value="Letter">Letter</option>
+                </select>
+              </div>
+              <div class="col">
+                <label class="form-label small mb-1">方向</label>
+                <select v-model="page_orient" class="form-select form-select-sm">
+                  <option value="portrait">纵向</option>
+                  <option value="landscape">横向</option>
+                </select>
+              </div>
+            </div>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">上边距(cm)</label><input v-model.number="m_top" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">右边距(cm)</label><input v-model.number="m_right" type="number" step="0.1" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">下边距(cm)</label><input v-model.number="m_bottom" type="number" step="0.1" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">左边距(cm)</label><input v-model.number="m_left" type="number" step="0.1" class="form-control form-control-sm" /></div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 页眉页脚 -->
+      <div class="card mb-2">
+        <details>
+          <summary class="card-header fw-semibold text-primary small py-2 px-2">页眉 / 页脚</summary>
+          <div class="card-body p-2">
+            <label class="form-label small mb-1">页眉文字</label>
+            <input v-model="header_text" type="text" placeholder="（空=不显示页眉）" class="form-control form-control-sm" />
+            <label class="form-label small mt-2 mb-1">页眉对齐</label>
+            <select v-model="header_align" class="form-select form-select-sm">
+              <option value="center">居中</option>
+              <option value="left">左对齐</option>
+              <option value="right">右对齐</option>
+            </select>
+            <div class="d-flex gap-3 mt-2 small">
+              <label class="d-flex align-items-center gap-1"><input v-model="footer_pagenum" type="checkbox" class="form-check-input" />显示页码</label>
+              <label class="d-flex align-items-center gap-1"><input v-model="footer_total" type="checkbox" class="form-check-input" />显示总页数</label>
+            </div>
+            <div class="row g-2 mt-1">
+              <div class="col"><label class="form-label small mb-1">页码前缀</label><input v-model="footer_prefix" class="form-control form-control-sm" /></div>
+              <div class="col"><label class="form-label small mb-1">页码后缀</label><input v-model="footer_suffix" class="form-control form-control-sm" /></div>
+            </div>
+            <label class="form-label small mt-2 mb-1">页脚对齐</label>
+            <select v-model="footer_align" class="form-select form-select-sm">
+              <option value="center">居中</option>
+              <option value="left">左对齐</option>
+              <option value="right">右对齐</option>
+            </select>
+          </div>
+        </details>
+      </div>
+
+      <!-- 预览内容 & 操作 -->
+      <div class="card mb-2">
+        <div class="card-body p-2">
+          <label class="form-label small mb-1">预览内容 (Markdown)</label>
+          <textarea v-model="preview_md" class="form-control form-control-sm" style="min-height:130px;resize:vertical;"></textarea>
+          <div class="row g-2 mt-2">
+            <div class="col">
+              <button @click="previewDocx" :disabled="previewBusy" class="btn btn-primary btn-sm w-100">
+                [[ previewBusy ? '预览中...' : '立即预览' ]]
+              </button>
+            </div>
+            <div class="col">
+              <button @click="saveTpl" :disabled="saveInflight" class="btn btn-secondary btn-sm w-100">
+                [[ saveInflight ? '保存中...' : '保存模板' ]]
+              </button>
+            </div>
+          </div>
+          <div class="form-check mt-2 small">
+            <input v-model="autoPreview" type="checkbox" class="form-check-input" id="autoPreviewChk" />
+            <label class="form-check-label" for="autoPreviewChk">自动预览（停止输入后 600ms）</label>
+          </div>
+          <div v-if="statusMsg" :class="statusOk ? 'text-success' : 'text-danger'" class="small mt-1">
+            [[ statusMsg ]]
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== RIGHT MAIN AREA ===== -->
+    <main class="right">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="d-flex align-items-center gap-2">
+          <span class="dot" :class="{ live: liveDot }"></span>
+          <span class="text-muted small">DOCX 预览区</span>
+        </div>
+        <span class="text-muted small">[[ metaInfo ]]</span>
+      </div>
+      <div id="docxPreview" ref="docxPreview"></div>
+      <div v-if="errorMsg" class="alert alert-danger mt-2 small">[[ errorMsg ]]</div>
+    </main>
+  </div>
 </div>
 
 <script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
 <script src="https://unpkg.com/docx-preview@0.3.2/dist/docx-preview.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 <script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const statusEl = $("status");
-  const metaEl = $("metaInfo");
-  const errEl = $("errorBox");
-  const liveDot = $("liveDot");
-  const previewEl = $("docxPreview");
-  const btnPreview = $("btnPreview");
-
-  let previewTimer = null;
-  let requestSeq = 0;
-
-  // 增强：并发控制 + 尾触发
-  let previewInflight = false;
-  let previewQueued = false;
-  let saveInflight = false;
-
-  function setStatus(msg, ok=true){
-    statusEl.className = "status " + (ok ? "ok" : "err");
-    statusEl.textContent = msg || "";
-  }
-
-  function setError(msg){
-    if (!msg){ errEl.style.display = "none"; errEl.textContent = ""; return; }
-    errEl.style.display = "block";
-    errEl.textContent = msg;
-  }
-
-  // 修复：黑色也要写入模板（不再过滤 #000000）
-  function colorVal(id) {
-    const v = ($(id).value || "").trim();
-    return v || undefined;
-  }
-
-  function cfg(){
+const { createApp } = Vue;
+createApp({
+  delimiters: ['[[', ']]'],
+  data() {
     return {
-      id: $("tpl_id").value.trim() || "my_tpl",
-      name: $("tpl_name").value.trim() || "我的模板",
-      description: "模板配置中心保存",
-      page: {
-        size: $("page_size").value || "A4",
-        orientation: $("page_orient").value || "portrait",
-        margin_cm: [
-          Number($("m_top").value || 2.5),
-          Number($("m_right").value || 2.2),
-          Number($("m_bottom").value || 2.5),
-          Number($("m_left").value || 2.2)
-        ]
-      },
-      fonts: {
-        title: {
-          family: $("title_font").value || "微软雅黑",
-          size_pt: Number($("title_size").value || 18),
-          bold: $("title_bold").checked,
-          italic: $("title_italic").checked,
-          color: colorVal("title_color")
-        },
-        h1: {
-          family: $("h1_font").value || "微软雅黑",
-          size_pt: Number($("h1_size").value || 15),
-          bold: $("h1_bold").checked,
-          italic: $("h1_italic").checked,
-          color: colorVal("h1_color")
-        },
-        h2: {
-          family: $("h2_font").value || "微软雅黑",
-          size_pt: Number($("h2_size").value || 13),
-          bold: $("h2_bold").checked,
-          italic: $("h2_italic").checked,
-          color: colorVal("h2_color")
-        },
-        h3: {
-          family: $("h3_font").value || "微软雅黑",
-          size_pt: Number($("h3_size").value || 12),
-          bold: $("h3_bold").checked,
-          italic: $("h3_italic").checked,
-          color: colorVal("h3_color")
-        },
-        h4: {
-          family: $("h4_font").value || "微软雅黑",
-          size_pt: Number($("h4_size").value || 11),
-          bold: $("h4_bold").checked,
-          italic: $("h4_italic").checked,
-          color: colorVal("h4_color")
-        },
-        body: {
-          family: $("body_font").value || "宋体",
-          size_pt: Number($("body_size").value || 11),
-          bold: $("body_bold").checked,
-          italic: $("body_italic").checked,
-          color: colorVal("body_color")
-        },
-        list: {
-          family: $("list_font").value || "宋体",
-          size_pt: Number($("list_size").value || 11),
-          bold: $("list_bold").checked,
-          italic: $("list_italic").checked,
-          color: colorVal("list_color")
-        }
-      },
-      paragraph_styles: {
-        title: {
-          alignment: $("title_align").value || "center",
-          line_spacing: Number($("title_lsp").value || 1.2),
-          space_before_pt: Number($("title_sb").value || 0),
-          space_after_pt: Number($("title_sa").value || 18),
-          first_line_indent_chars: Number($("title_indent").value || 0),
-          keep_with_next: true
-        },
-        h1: {
-          alignment: $("h1_align").value || "left",
-          line_spacing: Number($("h1_lsp").value || 1.2),
-          space_before_pt: Number($("h1_sb").value || 18),
-          space_after_pt: Number($("h1_sa").value || 6),
-          first_line_indent_chars: Number($("h1_indent").value || 0),
-          keep_with_next: true
-        },
-        h2: {
-          alignment: $("h2_align").value || "left",
-          line_spacing: Number($("h2_lsp").value || 1.2),
-          space_before_pt: Number($("h2_sb").value || 12),
-          space_after_pt: Number($("h2_sa").value || 4),
-          first_line_indent_chars: Number($("h2_indent").value || 0),
-          keep_with_next: true
-        },
-        h3: {
-          alignment: $("h3_align").value || "left",
-          line_spacing: Number($("h3_lsp").value || 1.2),
-          space_before_pt: Number($("h3_sb").value || 10),
-          space_after_pt: Number($("h3_sa").value || 4),
-          first_line_indent_chars: Number($("h3_indent").value || 0),
-          keep_with_next: false
-        },
-        h4: {
-          alignment: $("h4_align").value || "left",
-          line_spacing: Number($("h4_lsp").value || 1.2),
-          space_before_pt: Number($("h4_sb").value || 8),
-          space_after_pt: Number($("h4_sa").value || 4),
-          first_line_indent_chars: Number($("h4_indent").value || 0),
-          keep_with_next: false
-        },
-        body: {
-          alignment: $("body_align").value || "justify",
-          line_spacing: Number($("line_spacing").value || 1.5),
-          space_before_pt: Number($("body_sb").value || 0),
-          space_after_pt: Number($("body_sa").value || 6),
-          first_line_indent_chars: Number($("indent_chars").value || 2)
-        },
-        list: {
-          alignment: "left",
-          line_spacing: 1.3,
-          space_before_pt: 0,
-          space_after_pt: 4,
-          first_line_indent_chars: 0
-        }
-      },
-      header_footer: {
-        header: {
-          text: $("header_text").value || "",
-          alignment: $("header_align").value || "center"
-        },
-        footer: {
-          show_page_number: $("footer_pagenum").checked,
-          prefix: $("footer_prefix").value,
-          suffix: $("footer_suffix").value,
-          show_total_pages: $("footer_total").checked,
-          alignment: $("footer_align").value || "center"
-        }
-      },
-      image: {max_width_cm: 16, alignment: "center"},
-      paragraph: {
-        line_spacing: Number($("line_spacing").value || 1.5),
-        space_before_pt: 4,
-        space_after_pt: 6,
-        first_line_indent_chars: Number($("indent_chars").value || 2)
-      }
+      tplId: 'my_tpl',
+      tplName: '我的模板',
+      tplList: [],
+      selectedLoadId: '',
+      userTplIds: [],
+
+      title_font: '微软雅黑', title_size: 18, title_color: '#000000',
+      title_bold: true, title_italic: false, title_align: 'center',
+      title_lsp: 1.2, title_sb: 0, title_sa: 18, title_indent: 0,
+
+      h1_font: '微软雅黑', h1_size: 15, h1_color: '#000000',
+      h1_bold: true, h1_italic: false, h1_align: 'left',
+      h1_lsp: 1.2, h1_sb: 18, h1_sa: 6, h1_indent: 0,
+
+      h2_font: '微软雅黑', h2_size: 13, h2_color: '#000000',
+      h2_bold: true, h2_italic: false, h2_align: 'left',
+      h2_lsp: 1.2, h2_sb: 12, h2_sa: 4, h2_indent: 0,
+
+      h3_font: '微软雅黑', h3_size: 12, h3_color: '#000000',
+      h3_bold: true, h3_italic: false, h3_align: 'left',
+      h3_lsp: 1.2, h3_sb: 10, h3_sa: 4, h3_indent: 0,
+
+      h4_font: '微软雅黑', h4_size: 11, h4_color: '#000000',
+      h4_bold: true, h4_italic: false, h4_align: 'left',
+      h4_lsp: 1.2, h4_sb: 8, h4_sa: 4, h4_indent: 0,
+
+      body_font: '宋体', body_size: 11, body_color: '#000000',
+      body_bold: false, body_italic: false, body_align: 'justify',
+      line_spacing: 1.5, body_sb: 0, body_sa: 6, indent_chars: 2,
+
+      list_font: '宋体', list_size: 11, list_color: '#000000',
+      list_bold: false, list_italic: false,
+
+      page_size: 'A4', page_orient: 'portrait',
+      m_top: 2.5, m_right: 2.2, m_bottom: 2.5, m_left: 2.2,
+
+      header_text: '', header_align: 'center',
+      footer_pagenum: true, footer_total: false,
+      footer_prefix: '第 ', footer_suffix: ' 页', footer_align: 'center',
+
+      preview_md: '# 2026Q1 销售分析报告\n\n## 概览\n本季度销售额同比增长 **12.8%**。\n\n## 维度关键发现\n- 艺术家维度贡献最高\n- 国家维度北美增长明显\n\n## 建议\n1. 深耕高增长区域\n2. 对低增长客户做分层运营',
+
+      autoPreview: false,
+      statusMsg: '', statusOk: true, errorMsg: '',
+      liveDot: false, metaInfo: '等待预览...', previewBusy: false,
+      previewInflight: false, previewQueued: false, saveInflight: false,
+      requestSeq: 0, previewTimer: null,
     };
-  }
-
-  function setPreviewBusy(busy) {
-    btnPreview.disabled = !!busy;
-    btnPreview.textContent = busy ? "预览中..." : "立即预览";
-  }
-
-  async function doPreviewDocxCore() {
-    const seq = ++requestSeq;
-    setError("");
-    setStatus("正在生成预览...");
-    metaEl.textContent = "请求后端生成 DOCX...";
-    liveDot.classList.remove("live");
-    setPreviewBusy(true);
-
+  },
+  computed: {
+    cfgSnapshot() { return JSON.stringify(this.buildCfgObject()); },
+    canDeleteLoadedTpl() { return this.isUserTpl(this.selectedLoadId); }
+  },
+  watch: {
+    cfgSnapshot() { this.schedulePreview(); },
+    preview_md() { this.schedulePreview(); }
+  },
+  async mounted() {
+    await this.refreshTplList();
     try {
-      if (typeof docx === "undefined" || !docx.renderAsync) {
-        throw new Error("docx-preview 未加载成功（docx.renderAsync 不可用）");
-      }
-
-      const res = await fetch("/api/export/template/preview-docx", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-          template_config: cfg(),
-          report_title: "模板预览",
-          report_markdown: $("preview_md").value || "# 模板预览\n\n这是一段正文预览。"
-        })
-      });
-
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || ("HTTP " + res.status));
-      }
-
-      const arr = await res.arrayBuffer();
-
-      // 如果本次已过期，直接丢弃
-      if (seq < requestSeq) return;
-
-      previewEl.innerHTML = "";
-      await docx.renderAsync(arr, previewEl, null, {
-        className: "docx",
-        inWrapper: true,
-        breakPages: true,
-        ignoreWidth: false,
-        ignoreHeight: false,
-        ignoreFonts: false
-      });
-
-      liveDot.classList.add("live");
-      const kb = (arr.byteLength / 1024).toFixed(1);
-      metaEl.textContent = `预览已更新 · ${kb} KB`;
-      setStatus("预览成功");
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setStatus("预览失败", false);
-      setError("预览失败： " + msg);
-      metaEl.textContent = "预览失败";
-      console.error(e);
-    } finally {
-      setPreviewBusy(false);
-    }
-  }
-
-  async function previewDocx() {
-    // 正在预览：仅记录“需要再来一次”
-    if (previewInflight) {
-      previewQueued = true;
-      return;
-    }
-
-    previewInflight = true;
-    try {
-      await doPreviewDocxCore();
-    } finally {
-      previewInflight = false;
-    }
-
-    // 尾触发：期间如果有新请求，只跑最后一次
-    if (previewQueued) {
-      previewQueued = false;
-      previewDocx();
-    }
-  }
-
-  async function saveTpl(){
-    if (saveInflight) return;
-    saveInflight = true;
-
-    const btnSave = $("btnSave");
-    const oldText = btnSave.textContent;
-    btnSave.disabled = true;
-    btnSave.textContent = "保存中...";
-
-    setStatus("正在保存模板...");
-    setError("");
-    try {
-      const res = await fetch("/api/export/template/save", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ template_config: cfg() })
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.message || ("HTTP " + res.status));
-      setStatus("模板已保存");
-      alert("模板已保存");
-      // Notify index.html to refresh template dropdown
+      this._bc = new BroadcastChannel('tpl_saved');
+      this._bc.onmessage = () => this.refreshTplList();
+    } catch(e) {}
+  },
+  methods: {
+    colorVal(v) { const s = (v || '').trim(); return s || undefined; },
+    cfg() { return this.buildCfgObject(); },
+    buildCfgObject() {
+      return {
+        id: (this.tplId || '').trim() || 'my_tpl',
+        name: (this.tplName || '').trim() || '我的模板',
+        description: '模板配置中心保存',
+        page: {
+          size: this.page_size || 'A4',
+          orientation: this.page_orient || 'portrait',
+          margin_cm: [Number(this.m_top)||2.5, Number(this.m_right)||2.2, Number(this.m_bottom)||2.5, Number(this.m_left)||2.2]
+        },
+        fonts: {
+          title: { family: this.title_font||'微软雅黑', size_pt: Number(this.title_size)||18, bold: this.title_bold, italic: this.title_italic, color: this.colorVal(this.title_color) },
+          h1:    { family: this.h1_font   ||'微软雅黑', size_pt: Number(this.h1_size)   ||15, bold: this.h1_bold,    italic: this.h1_italic,    color: this.colorVal(this.h1_color)    },
+          h2:    { family: this.h2_font   ||'微软雅黑', size_pt: Number(this.h2_size)   ||13, bold: this.h2_bold,    italic: this.h2_italic,    color: this.colorVal(this.h2_color)    },
+          h3:    { family: this.h3_font   ||'微软雅黑', size_pt: Number(this.h3_size)   ||12, bold: this.h3_bold,    italic: this.h3_italic,    color: this.colorVal(this.h3_color)    },
+          h4:    { family: this.h4_font   ||'微软雅黑', size_pt: Number(this.h4_size)   ||11, bold: this.h4_bold,    italic: this.h4_italic,    color: this.colorVal(this.h4_color)    },
+          body:  { family: this.body_font ||'宋体',              size_pt: Number(this.body_size) ||11, bold: this.body_bold,  italic: this.body_italic,  color: this.colorVal(this.body_color)  },
+          list:  { family: this.list_font ||'宋体',              size_pt: Number(this.list_size) ||11, bold: this.list_bold,  italic: this.list_italic,  color: this.colorVal(this.list_color)  }
+        },
+        paragraph_styles: {
+          title: { alignment: this.title_align||'center',  line_spacing: Number(this.title_lsp)||1.2, space_before_pt: Number(this.title_sb)||0,  space_after_pt: Number(this.title_sa)||18, first_line_indent_chars: Number(this.title_indent)||0, keep_with_next: true  },
+          h1:    { alignment: this.h1_align   ||'left',    line_spacing: Number(this.h1_lsp)   ||1.2, space_before_pt: Number(this.h1_sb)   ||18, space_after_pt: Number(this.h1_sa)   ||6,  first_line_indent_chars: Number(this.h1_indent)   ||0, keep_with_next: true  },
+          h2:    { alignment: this.h2_align   ||'left',    line_spacing: Number(this.h2_lsp)   ||1.2, space_before_pt: Number(this.h2_sb)   ||12, space_after_pt: Number(this.h2_sa)   ||4,  first_line_indent_chars: Number(this.h2_indent)   ||0, keep_with_next: true  },
+          h3:    { alignment: this.h3_align   ||'left',    line_spacing: Number(this.h3_lsp)   ||1.2, space_before_pt: Number(this.h3_sb)   ||10, space_after_pt: Number(this.h3_sa)   ||4,  first_line_indent_chars: Number(this.h3_indent)   ||0, keep_with_next: false },
+          h4:    { alignment: this.h4_align   ||'left',    line_spacing: Number(this.h4_lsp)   ||1.2, space_before_pt: Number(this.h4_sb)   ||8,  space_after_pt: Number(this.h4_sa)   ||4,  first_line_indent_chars: Number(this.h4_indent)   ||0, keep_with_next: false },
+          body:  { alignment: this.body_align ||'justify', line_spacing: Number(this.line_spacing)||1.5, space_before_pt: Number(this.body_sb)||0, space_after_pt: Number(this.body_sa)||6, first_line_indent_chars: Number(this.indent_chars)||2 },
+          list:  { alignment: 'left', line_spacing: 1.3, space_before_pt: 0, space_after_pt: 4, first_line_indent_chars: 0 }
+        },
+        header_footer: {
+          header: { text: this.header_text||'', alignment: this.header_align||'center' },
+          footer: { show_page_number: this.footer_pagenum, prefix: this.footer_prefix, suffix: this.footer_suffix, show_total_pages: this.footer_total, alignment: this.footer_align||'center' }
+        },
+        image: { max_width_cm: 16, alignment: 'center' },
+        paragraph: { line_spacing: Number(this.line_spacing)||1.5, space_before_pt: 4, space_after_pt: 6, first_line_indent_chars: Number(this.indent_chars)||2 }
+      };
+    },
+    async doPreviewDocxCore() {
+      const seq = ++this.requestSeq;
+      this.errorMsg = '';
+      this.setStatus('正在生成预览...');
+      this.metaInfo = '请求后端生成 DOCX...';
+      this.liveDot = false;
+      this.previewBusy = true;
       try {
-        const bc = new BroadcastChannel("tpl_saved");
-        bc.postMessage({ ts: Date.now() });
-        bc.close();
-      } catch(e) {}
-      try { localStorage.setItem("tpl_saved", Date.now()); } catch(e) {}
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setStatus("保存失败", false);
-      setError("保存失败： " + msg);
-    } finally {
-      btnSave.disabled = false;
-      btnSave.textContent = oldText;
-      saveInflight = false;
-    }
+        if (typeof docx === 'undefined' || !docx.renderAsync) throw new Error('docx-preview 未加载成功（docx.renderAsync 不可用）');
+        const res = await fetch('/api/export/template/preview-docx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_config: this.cfg(), report_title: '模板预览', report_markdown: this.preview_md || '# 模板预览\n\n这是一段正文预览。' })
+        });
+        if (!res.ok) { const j = await res.json().catch(()=>({})); throw new Error(j.message||('HTTP '+res.status)); }
+        const arr = await res.arrayBuffer();
+        if (seq < this.requestSeq) return;
+        const previewEl = this.$refs.docxPreview;
+        previewEl.innerHTML = '';
+        await docx.renderAsync(arr, previewEl, null, { className: 'docx', inWrapper: true, breakPages: true, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false });
+        this.liveDot = true;
+        const kb = (arr.byteLength/1024).toFixed(1);
+        this.metaInfo = `预览已更新 · ${kb} KB`;
+        this.setStatus('预览成功');
+      } catch(e) {
+        const msg = e?.message || String(e);
+        this.setStatus('预览失败', false);
+        this.errorMsg = '预览失败： ' + msg;
+        this.metaInfo = '预览失败';
+        console.error(e);
+      } finally { this.previewBusy = false; }
+    },
+    async previewDocx() {
+      if (this.previewInflight) { this.previewQueued = true; return; }
+      this.previewInflight = true;
+      try { await this.doPreviewDocxCore(); } finally { this.previewInflight = false; }
+      if (this.previewQueued) { this.previewQueued = false; this.previewDocx(); }
+    },
+    async saveTpl() {
+      if (this.saveInflight) return;
+      this.saveInflight = true;
+      this.setStatus('正在保存模板...');
+      this.errorMsg = '';
+      try {
+        const res = await fetch('/api/export/template/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_config: this.cfg() })
+        });
+        const j = await res.json().catch(()=>({}));
+        if (!res.ok) throw new Error(j.message||('HTTP '+res.status));
+        this.setStatus('模板已保存');
+        alert('模板已保存');
+        try { const bc = new BroadcastChannel('tpl_saved'); bc.postMessage({ts:Date.now()}); bc.close(); } catch(e){}
+        try { localStorage.setItem('tpl_saved', Date.now()); } catch(e){}
+      } catch(e) {
+        const msg = e?.message || String(e);
+        this.setStatus('保存失败', false);
+        this.errorMsg = '保存失败： ' + msg;
+      } finally { this.saveInflight = false; }
+    },
+    schedulePreview() {
+      if (!this.autoPreview) return;
+      clearTimeout(this.previewTimer);
+      this.previewTimer = setTimeout(() => this.previewDocx(), 600);
+    },
+    async refreshTplList() {
+      try {
+        const res = await fetch('/api/export/templates');
+        const j = await res.json();
+        const arr = j.templates || [];
+        this.userTplIds = arr.filter(t => t.is_user).map(t => t.id);
+        this.tplList = arr;
+      } catch(e) { console.error('加载模板列表失败', e); }
+    },
+    isUserTpl(id) { return this.userTplIds.includes(id); },
+    async loadTpl() {
+      const id = this.selectedLoadId;
+      if (!id) return;
+      try {
+        const res = await fetch('/api/export/template/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const c = await res.json();
+        this.fillForm(c);
+        this.setStatus('模板已加载: ' + (c.name || id));
+        this.schedulePreview();
+      } catch(e) { this.setError('加载失败: ' + (e.message||e)); }
+    },
+    fillForm(c) {
+      if (!c) return;
+      if (c.id   != null) this.tplId   = c.id;
+      if (c.name != null) this.tplName = c.name;
+      const ff = (p, f) => {
+        f = f||{};
+        if (f.family  != null) this[p+'_font']   = f.family;
+        if (f.size_pt != null) this[p+'_size']   = f.size_pt;
+        if (f.bold    != null) this[p+'_bold']   = !!f.bold;
+        if (f.italic  != null) this[p+'_italic'] = !!f.italic;
+        if (f.color)           this[p+'_color']  = f.color;
+      };
+      const fon = c.fonts||{};
+      ff('title',fon.title); ff('h1',fon.h1); ff('h2',fon.h2); ff('h3',fon.h3); ff('h4',fon.h4); ff('body',fon.body); ff('list',fon.list);
+      const fp = (p, s) => {
+        s = s||{};
+        if (s.alignment               != null) this[p+'_align']  = s.alignment;
+        if (s.line_spacing            != null) this[p+'_lsp']    = s.line_spacing;
+        if (s.space_before_pt         != null) this[p+'_sb']     = s.space_before_pt;
+        if (s.space_after_pt          != null) this[p+'_sa']     = s.space_after_pt;
+        if (s.first_line_indent_chars != null) this[p+'_indent'] = s.first_line_indent_chars;
+      };
+      const ps = c.paragraph_styles||{};
+      fp('title',ps.title); fp('h1',ps.h1); fp('h2',ps.h2); fp('h3',ps.h3); fp('h4',ps.h4);
+      const pb = ps.body||{};
+      if (pb.alignment               != null) this.body_align  = pb.alignment;
+      if (pb.line_spacing            != null) this.line_spacing = pb.line_spacing;
+      if (pb.space_before_pt         != null) this.body_sb      = pb.space_before_pt;
+      if (pb.space_after_pt          != null) this.body_sa      = pb.space_after_pt;
+      if (pb.first_line_indent_chars != null) this.indent_chars = pb.first_line_indent_chars;
+      const pg = c.page||{};
+      if (pg.size        != null) this.page_size   = pg.size;
+      if (pg.orientation != null) this.page_orient = pg.orientation;
+      const m = pg.margin_cm||[];
+      if (m.length===4) { this.m_top=m[0]; this.m_right=m[1]; this.m_bottom=m[2]; this.m_left=m[3]; }
+      const hf = c.header_footer||{};
+      const hdr = hf.header||{};
+      if (hdr.text      != null) this.header_text  = hdr.text;
+      if (hdr.alignment != null) this.header_align = hdr.alignment;
+      const ftr = hf.footer||{};
+      if (ftr.show_page_number != null) this.footer_pagenum = !!ftr.show_page_number;
+      if (ftr.prefix           != null) this.footer_prefix  = ftr.prefix;
+      if (ftr.suffix           != null) this.footer_suffix  = ftr.suffix;
+      if (ftr.show_total_pages != null) this.footer_total   = !!ftr.show_total_pages;
+      if (ftr.alignment        != null) this.footer_align   = ftr.alignment;
+    },
+    async deleteTpl() {
+      const id = this.selectedLoadId;
+      if (!id || !this.isUserTpl(id)) return;
+      if (!confirm('确定要删除用户模板 "' + id + '" 吗？此操作不可恢复。')) return;
+      try {
+        const res = await fetch('/api/export/template/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_id: id })
+        });
+        const j = await res.json().catch(()=>({}));
+        if (!res.ok) throw new Error(j.message||('HTTP '+res.status));
+        this.setStatus('模板已删除');
+        this.selectedLoadId = '';
+        await this.refreshTplList();
+      } catch(e) { this.setError('删除失败: ' + (e.message||e)); }
+    },
+    setStatus(msg, ok=true) { this.statusMsg = msg||''; this.statusOk = ok; },
+    setError(msg) { this.errorMsg = msg||''; }
   }
-
-  function schedulePreview(){
-    if (!$("autoPreview").checked) return;
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => previewDocx(), 600);
-  }
-
-  $("btnPreview").addEventListener("click", previewDocx);
-  $("btnSave").addEventListener("click", saveTpl);
-
-  // ---- 加载/删除已有模板 ----
-  const loadTplSelect = $("loadTplSelect");
-  const btnLoadTpl = $("btnLoadTpl");
-  const btnDeleteTpl = $("btnDeleteTpl");
-  const userTplIds = new Set();
-
-  async function refreshTplList() {
-    try {
-      const res = await fetch("/api/export/templates");
-      const j = await res.json();
-      const arr = j.templates || [];
-      loadTplSelect.innerHTML = '<option value="">-- 选择模板 --</option>';
-      userTplIds.clear();
-      arr.forEach(t => {
-        const op = document.createElement("option");
-        op.value = t.id;
-        op.textContent = `${t.name || t.id}${t.is_user ? " ★" : ""}`;
-        loadTplSelect.appendChild(op);
-        if (t.is_user) userTplIds.add(t.id);
-      });
-      updateDeleteBtn();
-    } catch (e) {
-      console.error("加载模板列表失败", e);
-    }
-  }
-
-  function updateDeleteBtn() {
-    btnDeleteTpl.disabled = !userTplIds.has(loadTplSelect.value);
-  }
-
-  loadTplSelect.addEventListener("change", updateDeleteBtn);
-
-  btnLoadTpl.addEventListener("click", async () => {
-    const id = loadTplSelect.value;
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/export/template/${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const c = await res.json();
-      fillForm(c);
-      setStatus("模板已加载: " + (c.name || id));
-      schedulePreview(); // 仅在 autoPreview 开启时触发
-    } catch (e) {
-      setError("加载失败: " + (e.message || e));
-    }
-  });
-
-  btnDeleteTpl.addEventListener("click", async () => {
-    const id = loadTplSelect.value;
-    if (!id || !userTplIds.has(id)) return;
-    if (!confirm(`确定要删除用户模板 "${id}" 吗？此操作不可恢复。`)) return;
-    try {
-      const res = await fetch("/api/export/template/delete", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ template_id: id })
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.message || ("HTTP " + res.status));
-      setStatus("模板已删除");
-      await refreshTplList();
-    } catch (e) {
-      setError("删除失败: " + (e.message || e));
-    }
-  });
-
-  function fillForm(templateConfig) {
-    function setField(id, val) {
-      const el = $(id);
-      if (!el || val === undefined || val === null) return;
-      if (el.type === "checkbox") el.checked = !!val;
-      else el.value = val;
-    }
-
-    function fillFont(prefix, font) {
-      font = font || {};
-      setField(prefix + "_font", font.family);
-      setField(prefix + "_size", font.size_pt);
-      setField(prefix + "_bold", font.bold);
-      setField(prefix + "_italic", font.italic);
-      if (font.color) setField(prefix + "_color", font.color);
-    }
-
-    function fillParaStyle(prefix, style) {
-      style = style || {};
-      setField(prefix + "_align", style.alignment);
-      setField(prefix + "_lsp", style.line_spacing);
-      setField(prefix + "_sb", style.space_before_pt);
-      setField(prefix + "_sa", style.space_after_pt);
-      setField(prefix + "_indent", style.first_line_indent_chars);
-    }
-
-    setField("tpl_id", templateConfig.id);
-    setField("tpl_name", templateConfig.name);
-
-    const fonts = templateConfig.fonts || {};
-    fillFont("title", fonts.title);
-    fillFont("h1", fonts.h1);
-    fillFont("h2", fonts.h2);
-    fillFont("h3", fonts.h3);
-    fillFont("h4", fonts.h4);
-    fillFont("body", fonts.body);
-    fillFont("list", fonts.list);
-
-    const ps = templateConfig.paragraph_styles || {};
-    fillParaStyle("title", ps.title);
-    fillParaStyle("h1", ps.h1);
-    fillParaStyle("h2", ps.h2);
-    fillParaStyle("h3", ps.h3);
-    fillParaStyle("h4", ps.h4);
-    // body uses different id keys
-    const pb = ps.body || {};
-    setField("body_align", pb.alignment);
-    setField("line_spacing", pb.line_spacing);
-    setField("body_sb", pb.space_before_pt);
-    setField("body_sa", pb.space_after_pt);
-    setField("indent_chars", pb.first_line_indent_chars);
-
-    const page = templateConfig.page || {};
-    setField("page_size", page.size);
-    setField("page_orient", page.orientation);
-    const margins = page.margin_cm || [];
-    if (margins.length === 4) {
-      setField("m_top", margins[0]);
-      setField("m_right", margins[1]);
-      setField("m_bottom", margins[2]);
-      setField("m_left", margins[3]);
-    }
-
-    const hf = templateConfig.header_footer || {};
-    const header = hf.header || {};
-    setField("header_text", header.text);
-    setField("header_align", header.alignment);
-    const footer = hf.footer || {};
-    setField("footer_pagenum", footer.show_page_number);
-    setField("footer_prefix", footer.prefix);
-    setField("footer_suffix", footer.suffix);
-    setField("footer_total", footer.show_total_pages);
-    setField("footer_align", footer.alignment);
-  }
-
-  refreshTplList();
-
-  const watchIds = [
-    "tpl_id","tpl_name",
-    "title_font","title_size","title_color","title_bold","title_italic","title_align","title_lsp","title_sb","title_sa","title_indent",
-    "h1_font","h1_size","h1_color","h1_bold","h1_italic","h1_align","h1_lsp","h1_sb","h1_sa","h1_indent",
-    "h2_font","h2_size","h2_color","h2_bold","h2_italic","h2_align","h2_lsp","h2_sb","h2_sa","h2_indent",
-    "h3_font","h3_size","h3_color","h3_bold","h3_italic","h3_align","h3_lsp","h3_sb","h3_sa","h3_indent",
-    "h4_font","h4_size","h4_color","h4_bold","h4_italic","h4_align","h4_lsp","h4_sb","h4_sa","h4_indent",
-    "body_font","body_size","body_color","body_bold","body_italic","body_align","line_spacing","body_sb","body_sa","indent_chars",
-    "list_font","list_size","list_color","list_bold","list_italic",
-    "page_size","page_orient","m_top","m_right","m_bottom","m_left",
-    "header_text","header_align","footer_pagenum","footer_total","footer_prefix","footer_suffix","footer_align",
-    "preview_md"
-  ];
-
-  watchIds.forEach(id => {
-    const el = $(id);
-    if (!el) return;
-    el.addEventListener("input", schedulePreview);
-    el.addEventListener("change", schedulePreview);
-  });
-
-  $("autoPreview").addEventListener("change", () => {
-    if ($("autoPreview").checked) schedulePreview();
-  });
-
-  // 默认不自动首屏预览，减少初次卡顿
-  // previewDocx();
-})();
+}).mount('#app');
 </script>
 </body>
 </html>

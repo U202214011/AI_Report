@@ -121,8 +121,8 @@
   },
   "header_footer": {
     "header": {
-      "text": "",
-      "alignment": "center"
+      "text": "AI生成仅供参考",
+      "alignment": "left"
     },
     "footer": {
       "show_page_number": true,

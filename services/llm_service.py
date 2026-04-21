@@ -59,8 +59,6 @@ def stream_glm_chat(
             last = messages[-1]
             print(f"[LLM] last_role={last.get('role')}, last_content_len={len(str(last.get('content','')))}")
 
-        # ❌ 删除下面这行！它把 api_key 覆盖成了字符串 "ZHIPUAI_API_KEY"
-        # client = ZhipuAiClient(api_key="ZHIPUAI_API_KEY")
 
         request_kwargs: Dict[str, Any] = {
             "model": model,

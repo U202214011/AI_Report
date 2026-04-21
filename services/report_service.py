@@ -378,7 +378,7 @@ def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label:
             # 绘制带阴影的线条
             ax.plot(xs, ys, marker='o', label=s.get('label', 'series'),
                     linewidth=3, markersize=8, alpha=0.8, color=color,
-                    shadow=True, markeredgecolor='white', markeredgewidth=2)
+                    markeredgecolor='white', markeredgewidth=2)
 
     # 设置坐标轴和标题
     ax.set_xlabel("时间", fontsize=12, fontweight='bold')

@@ -435,7 +435,8 @@ createApp({
           }),
         });
         const j = await res.json();
-        this.ctxText  = j.message + '（约 ' + j.used_tokens_est + '/' + j.limit_tokens_est + ' tokens）';
+        const chars   = j.used_chars || 0;
+        this.ctxText  = j.message + '（约 ' + chars + ' 字符 / ' + j.used_tokens_est + ' tokens，限制 ' + j.limit_tokens_est + ' tokens）';
         this.ctxLevel = j.level === 'danger' ? 'danger' : (j.level === 'warn' ? 'warn' : 'ok');
       } catch (e) {
         console.error('refreshCtx failed:', e);
@@ -652,7 +653,8 @@ createApp({
             } else if (ev === 'context') {
               const trimmed = obj.trimmed_count || 0;
               const suffix = trimmed > 0 ? '（已自动裁剪 ' + trimmed + ' 条旧消息）' : '';
-              this.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + ' tokens）' + suffix;
+              const chars  = obj.used_chars || 0;
+              this.ctxText  = obj.message + '（约 ' + chars + ' 字符 / ' + obj.used_tokens_est + ' tokens，限制 ' + obj.limit_tokens_est + ' tokens）' + suffix;
               this.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;

@@ -3,7 +3,7 @@ import json
 import re
 import html
 from io import BytesIO
-from flask import request, jsonify, render_template, Response, send_file
+from flask import request, jsonify, render_template, Response, send_file, stream_with_context
 
 from adapters.api_adapter import normalize_request
 from adapters.report_adapter import adapt_report_output
@@ -23,7 +23,7 @@ from services.report_service import (
     generate_pie_chart,
     normalize_time_range_for_debug
 )
-from services.llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
+from services.llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens, estimate_messages_chars
 from services.export_service import (
     list_export_templates,
     load_template_config,
@@ -115,7 +115,7 @@ def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
     }
 
 
-def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -> dict:
+def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT, used_chars: int = 0) -> dict:
     ratio = used_tokens / limit_tokens if limit_tokens > 0 else 0
     if ratio >= CONTEXT_DANGER_RATIO:
         level = "danger"
@@ -131,6 +131,7 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
         "message": msg,
         "used_tokens_est": used_tokens,
         "limit_tokens_est": limit_tokens,
+        "used_chars": used_chars,
         "ratio": round(ratio, 4)
     }
 
@@ -141,6 +142,8 @@ def _trim_messages_to_fit(messages: list, system_prompt: str) -> tuple:
     leaving at least MIN_RESPONSE_TOKENS tokens available for the LLM to respond.
 
     Always retains the system prompt and the last user message.
+    Ensures the trimmed list starts with a user message so the conversation
+    structure sent to the API is always valid.
     Returns (trimmed_messages, number_of_removed_messages).
     """
     budget = MODEL_CONTEXT_LIMIT - MIN_RESPONSE_TOKENS
@@ -152,6 +155,11 @@ def _trim_messages_to_fit(messages: list, system_prompt: str) -> tuple:
         used = estimate_messages_tokens(sys_msgs + trimmed)
         if used <= budget:
             break
+        trimmed.pop(0)
+        removed += 1
+
+    # Ensure the trimmed list starts with a user message (never an assistant turn)
+    while trimmed and trimmed[0].get("role") != "user":
         trimmed.pop(0)
         removed += 1
 
@@ -173,6 +181,22 @@ def _sse(event: str, data) -> str:
 
 def _sse_message(data) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _make_sse_response(gen) -> Response:
+    """Wrap a generator as an SSE Response with headers that prevent buffering.
+
+    The ``X-Accel-Buffering: no`` header disables nginx proxy buffering so that
+    each SSE event is flushed to the client immediately, making the browser's
+    TTFB (首字时间) reflect the first token rather than the full response.
+    ``Cache-Control: no-cache`` and ``Connection: keep-alive`` are required by
+    the SSE specification.
+    """
+    resp = Response(stream_with_context(gen), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
 
 
 def _log_sse_chunk(route_name: str, idx: int, chunk_type: str, content: str):
@@ -369,7 +393,7 @@ def register_routes(app):
                     yield _sse("meta", {"status": "done"})
                     logger.info(f"[/api-llm/sse] stream done total_chunks={chunk_idx}")
 
-            return Response(stream(), mimetype="text/event-stream")
+            return _make_sse_response(stream())
         except Exception as e:
             logger.exception(f"[/api-llm/sse] route exception: {e}")
             return jsonify({"message": str(e)}), 500
@@ -381,7 +405,8 @@ def register_routes(app):
         system_prompt = payload.get("systemPrompt") or ""
         full_messages = [{"role": "system", "content": system_prompt}] + (messages if isinstance(messages, list) else [])
         used = estimate_messages_tokens(full_messages)
-        return jsonify(_context_status(used, MODEL_CONTEXT_LIMIT))
+        used_chars = estimate_messages_chars(full_messages)
+        return jsonify(_context_status(used, MODEL_CONTEXT_LIMIT, used_chars=used_chars))
 
     @app.route("/api/chat/sse", methods=["POST"])
     def chat_sse():
@@ -404,7 +429,8 @@ def register_routes(app):
 
         full_messages = [{"role": "system", "content": system_prompt}] + messages
         used = estimate_messages_tokens(full_messages)
-        ctx = _context_status(used, MODEL_CONTEXT_LIMIT)
+        used_chars = estimate_messages_chars(full_messages)
+        ctx = _context_status(used, MODEL_CONTEXT_LIMIT, used_chars=used_chars)
         if trimmed_count > 0:
             ctx["trimmed_count"] = trimmed_count
             logger.warning(f"[/api/chat/sse] trimmed {trimmed_count} old message(s) to fit context")
@@ -452,7 +478,7 @@ def register_routes(app):
                 yield _sse("meta", {"status": "done"})
                 logger.info(f"[/api/chat/sse] stream done total_chunks={chunk_idx}")
 
-        return Response(stream(), mimetype="text/event-stream")
+        return _make_sse_response(stream())
 
     @app.route("/api/generate", methods=["POST"])
     def generate_report():

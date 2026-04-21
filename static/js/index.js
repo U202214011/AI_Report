@@ -5,7 +5,6 @@ createApp({
 
   data() {
     return {
-      // Form fields
       reportType: 'stat',
       reportStyle: 'simple',
       metric: 'sales_amount',
@@ -26,31 +25,26 @@ createApp({
         { value: 'employee', label: '员工' },
       ],
 
-      // Chat
       displayMessages: [],
       llmMessages: [],
       chatInput: '',
       sending: false,
       nextMsgId: 1,
 
-      // Context badge
       ctxText: '上下文充足',
       ctxLevel: 'ok',
       lastCtxCheckAt: 0,
       ctxCheckTimer: null,
 
-      // Prompt + plots
       promptText: '尚未生成 Prompt',
       plots: [],
 
-      // Export templates
       exportTemplates: [],
       userTemplateIds: [],
       selectedTemplateId: '',
       exportTitle: '',
       exporting: false,
 
-      // Custom template micro-config
       useCustomTpl: false,
       tplId: 'my_custom_tpl',
       tplName: '用户自定义模板',
@@ -65,13 +59,11 @@ createApp({
       tplMBottom: 2.5,
       tplMLeft: 2.2,
 
-      // Query preview modal
       showModal: false,
       modalLoading: false,
       modalQueries: [],
       modalError: '',
 
-      // Resizer
       isResizing: false,
       chatWidth: null,
     };
@@ -101,7 +93,6 @@ createApp({
       window.marked.setOptions({ breaks: true, gfm: true });
     }
 
-    // Welcome notice
     this.displayMessages.push({
       id: this.nextMsgId++,
       role: 'system',
@@ -118,7 +109,6 @@ createApp({
     await this.loadExportTemplates();
     await this.refreshCtxThrottled(true);
 
-    // Sync templates across tabs
     window.addEventListener('focus', () => this.loadExportTemplates());
     window.addEventListener('storage', (e) => {
       if (e.key === 'tpl_saved') this.loadExportTemplates();
@@ -142,7 +132,6 @@ createApp({
   },
 
   methods: {
-    // ---- Utilities ----
     escapeHtml(s) {
       return String(s || '')
         .replace(/&/g, '&amp;')
@@ -197,15 +186,15 @@ createApp({
     // ---- Message helpers ----
     getMsgClass(msg) {
       if (msg.kind === 'notice') return 'msg msg-notice';
-      if (msg.role === 'user')   return 'msg msg-user';
+      if (msg.role === 'user') return 'msg msg-user';
       if (msg.kind === 'reasoning') return 'msg msg-reasoning';
       return 'msg msg-assistant';
     },
 
     getMsgRoleLabel(msg) {
-      if (msg.role === 'user')      return '用户';
+      if (msg.role === 'user') return '用户';
       if (msg.kind === 'reasoning') return 'LLM 思考';
-      if (msg.kind === 'notice')    return '';
+      if (msg.kind === 'notice') return '';
       return 'LLM 回复';
     },
 
@@ -216,7 +205,6 @@ createApp({
       });
     },
 
-    // ---- Payload ----
     getPayload() {
       return {
         report_type:  this.reportType,
@@ -230,7 +218,6 @@ createApp({
       };
     },
 
-    // ---- Custom template config ----
     buildCustomTemplateConfig() {
       return {
         id:          (this.tplId   || 'custom_user_template').trim(),
@@ -293,7 +280,6 @@ createApp({
       };
     },
 
-    // ---- Export templates ----
     async loadExportTemplates() {
       try {
         const res = await fetch('/api/export/templates');
@@ -302,7 +288,6 @@ createApp({
         const arr = j.templates || [];
 
         this.userTemplateIds = [];
-
         if (!arr.length) {
           this.exportTemplates = [{ id: 'cn_management_a4', name: 'cn_management_a4' }];
           if (!this.selectedTemplateId) this.selectedTemplateId = 'cn_management_a4';
@@ -368,7 +353,6 @@ createApp({
       window.open('/template-designer', '_blank');
     },
 
-    // ---- Export DOCX ----
     async exportDocx() {
       const reportMarkdown = this.getLatestAssistantMarkdown();
       if (!reportMarkdown) {
@@ -421,7 +405,6 @@ createApp({
       }
     },
 
-    // ---- Context check ----
     async refreshCtx() {
       try {
         const res = await fetch('/api/chat/context-check', {
@@ -456,7 +439,6 @@ createApp({
       this.ctxCheckTimer = setTimeout(() => this.refreshCtxThrottled(false), 300);
     },
 
-    // ---- Latest assistant markdown ----
     getLatestAssistantMarkdown() {
       const reversed = this.llmMessages.slice().reverse();
       const last = reversed.find(function(m) {
@@ -465,7 +447,6 @@ createApp({
       return last ? (last.content || '').trim() : '';
     },
 
-    // ---- New session ----
     newSession() {
       this.llmMessages    = [];
       this.displayMessages = [];
@@ -482,7 +463,6 @@ createApp({
       this.refreshCtxThrottled(true);
     },
 
-    // ---- Generate ----
     async handleGenerate() {
       const p = this.getPayload();
       this.plots = [];
@@ -549,7 +529,6 @@ createApp({
       }
     },
 
-    // ---- Send chat message ----
     async handleSend() {
       const txt = (this.chatInput || '').trim();
       if (!txt) return;
@@ -647,6 +626,7 @@ createApp({
               this.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;
+              tDone = performance.now();
               break;
             }
           }

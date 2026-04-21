@@ -107,7 +107,6 @@
         <input class="form-control form-control-sm mb-2" type="text" v-model="exportTitle"
                placeholder="例如：2026年Q1销售分析报告" />
 
-        <!-- Custom template micro-config card -->
         <div class="tpl-card">
           <div class="tiny mb-2">模板微调（少量配置）</div>
           <div class="form-check">
@@ -201,7 +200,6 @@
       </div>
     </section>
 
-    <!-- Resizer -->
     <div class="resizer" :class="{ active: isResizing }" @mousedown="startResize"></div>
 
     <!-- RIGHT: Preview Panel -->
@@ -225,7 +223,6 @@
 
   </div><!-- /layout -->
 
-  <!-- ============ Query Preview Modal ============ -->
   <div class="modal-overlay" :class="{ open: showModal }" @click.self="showModal = false">
     <div class="modal-box">
       <div class="modal-head">

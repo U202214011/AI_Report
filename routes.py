@@ -177,7 +177,6 @@ def register_routes(app):
 
     def _chart_title(dim_key: str | None, gran: str, chart_kind: str, top_n: int | None = None, report_type: str | None = None) -> str:
         dim_label = _dim_label(dim_key) if dim_key else "总量"
-
         if dim_key == "total":
             if chart_kind == "line":
                 return f"{dim_label} {gran} 趋势"
@@ -218,7 +217,6 @@ def register_routes(app):
     ) -> dict:
         dimension_key = dim_key or "total"
         dimension_label = _dim_label(dimension_key)
-
         return {
             "title": title,
             "image": image,
@@ -240,17 +238,14 @@ def register_routes(app):
     def _build_plot_images_and_meta(plots: list[dict]) -> tuple[dict, dict]:
         plot_images = {}
         plot_images_meta = {}
-
         for idx, plot in enumerate(plots, start=1):
             meta = plot.get("meta") or {}
             dim_key = str(meta.get("dimension_key") or "total").strip().lower()
             chart_kind = str(meta.get("chart_kind") or "chart").strip().lower()
             scope = str(meta.get("scope") or ("overview" if dim_key == "total" else "dimension")).strip().lower()
-
             image_key = f"{scope}__{dim_key}__{chart_kind}__{idx}"
             plot_images[image_key] = plot.get("image")
             plot_images_meta[image_key] = meta
-
         return plot_images, plot_images_meta
 
     @app.route("/")
@@ -292,15 +287,10 @@ def register_routes(app):
     def generate_llm_report_sse():
         payload = request.get_json() or {}
         try:
-            logger.info(f"[/api-llm/sse] payload_keys={list(payload.keys())}")
-
             normalized = normalize_request(payload)
             prompt_bundle = build_prompt_bundle(normalized, plots=[])
             prompt_text = prompt_bundle.get("prompt") or ""
             show_reasoning = bool(payload.get("show_reasoning", True))
-
-            logger.info(f"[/api-llm/sse] normalized={normalized}")
-            logger.info(f"[/api-llm/sse] prompt_len={len(prompt_text)} show_reasoning={show_reasoning}")
 
             def stream():
                 yield _sse("meta", {"status": "start"})
@@ -326,13 +316,10 @@ def register_routes(app):
                                 yield _sse("reasoning", {"text": c})
                         else:
                             yield _sse("content", {"text": c})
-
                 except Exception as e:
-                    logger.exception(f"[/api-llm/sse] stream exception: {e}")
                     yield _sse("error", {"message": str(e)})
                 finally:
                     yield _sse("meta", {"status": "done"})
-                    logger.info(f"[/api-llm/sse] stream done total_chunks={chunk_idx}")
 
             return Response(stream(), mimetype="text/event-stream")
         except Exception as e:
@@ -464,7 +451,6 @@ def register_routes(app):
                         ))
                     data.extend(rows)
 
-                # 缓存每个维度的查询结果，避免重复查询
                 dim_rows_cache = {}
                 for dim in [d for d in dims if d != "total"]:
                     agg_payload = {
@@ -636,11 +622,6 @@ def register_routes(app):
 
             prompt_bundle = build_prompt_bundle(normalized, plots=plots)
 
-            logger.info(f"[/api/generate] normalized={normalized}")
-            logger.info(f"[/api/generate] templateDebug={prompt_bundle.get('templateDebug', {})}")
-            logger.info(f"[/api/generate] prompt_len={len(prompt_bundle.get('prompt') or '')}")
-            logger.info(f"[/api/generate] prompt_head={(prompt_bundle.get('prompt') or '')[:300]}")
-
             raw_output = {
                 "meta": {
                     "schema": "universal-report-v2",
@@ -682,7 +663,6 @@ def register_routes(app):
             topN = normalized["topN"]
 
             queries = []
-
             if "total" in dims:
                 sql, params = build_period_trend(metric, gran, since, until)
                 rows = run_query(sql, params)
@@ -749,10 +729,8 @@ def register_routes(app):
     def export_template_save():
         payload = request.get_json() or {}
         template_config = payload.get("template_config") or {}
-
         if not isinstance(template_config, dict) or not template_config:
             return jsonify({"message": "template_config 不能为空"}), 400
-
         try:
             saved = save_user_template_config(template_config)
             return jsonify({"ok": True, "template_id": saved.get("id")})
@@ -836,7 +814,6 @@ def register_routes(app):
 
         if not plot_images and built_plot_images:
             plot_images = built_plot_images
-
         if not plot_images_meta and built_plot_images_meta:
             plot_images_meta = built_plot_images_meta
 

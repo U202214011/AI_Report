@@ -35,7 +35,8 @@ def _extract_delta_fields(delta):
 
 def stream_glm_chat(
     messages: List[Dict[str, Any]],
-    model: str = "glm-4.7-flash",
+    model: str = "glm-4.7",
+    #model: str = "glm-4.7-flash",
     max_tokens: int = 65536,
     temperature: float = 0.7,
     thinking_enabled: bool = True

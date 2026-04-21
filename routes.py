@@ -48,6 +48,9 @@ SHOW_BAR_IN_TREND = True
 SHOW_PIE_IN_STAT = True
 
 MODEL_CONTEXT_LIMIT = 128000
+MAX_RESPONSE_TOKENS = 65536   # hard ceiling for LLM output tokens per turn
+MIN_RESPONSE_TOKENS = 512     # minimum output budget to keep after trimming
+SAFETY_BUFFER_TOKENS = 256    # headroom between max input and context window limit
 CONTEXT_WARN_RATIO = 0.80
 CONTEXT_DANGER_RATIO = 0.92
 
@@ -130,6 +133,38 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
         "limit_tokens_est": limit_tokens,
         "ratio": round(ratio, 4)
     }
+
+
+def _trim_messages_to_fit(messages: list, system_prompt: str) -> tuple:
+    """
+    Remove oldest non-system messages until the input fits within the token budget,
+    leaving at least MIN_RESPONSE_TOKENS tokens available for the LLM to respond.
+
+    Always retains the system prompt and the last user message.
+    Returns (trimmed_messages, number_of_removed_messages).
+    """
+    budget = MODEL_CONTEXT_LIMIT - MIN_RESPONSE_TOKENS
+    sys_msgs = [{"role": "system", "content": system_prompt}]
+    trimmed = list(messages)
+    removed = 0
+
+    while len(trimmed) > 1:
+        used = estimate_messages_tokens(sys_msgs + trimmed)
+        if used <= budget:
+            break
+        trimmed.pop(0)
+        removed += 1
+
+    return trimmed, removed
+
+
+def _dynamic_max_tokens(input_tokens: int) -> int:
+    """
+    Compute a safe max_tokens value so that input_tokens + max_tokens
+    does not exceed MODEL_CONTEXT_LIMIT.
+    """
+    available = MODEL_CONTEXT_LIMIT - input_tokens - SAFETY_BUFFER_TOKENS
+    return min(MAX_RESPONSE_TOKENS, max(MIN_RESPONSE_TOKENS, available))
 
 
 def _sse(event: str, data) -> str:
@@ -364,10 +399,20 @@ def register_routes(app):
         if not isinstance(messages, list) or len(messages) == 0:
             return jsonify({"message": "messages 不能为空"}), 400
 
+        # Trim old messages so that input + reserved output fits in the context window.
+        messages, trimmed_count = _trim_messages_to_fit(messages, system_prompt)
+
         full_messages = [{"role": "system", "content": system_prompt}] + messages
         used = estimate_messages_tokens(full_messages)
         ctx = _context_status(used, MODEL_CONTEXT_LIMIT)
+        if trimmed_count > 0:
+            ctx["trimmed_count"] = trimmed_count
+            logger.warning(f"[/api/chat/sse] trimmed {trimmed_count} old message(s) to fit context")
         logger.info(f"[/api/chat/sse] context={ctx}")
+
+        # Compute how many output tokens the model may safely produce.
+        max_resp_tokens = _dynamic_max_tokens(used)
+        logger.info(f"[/api/chat/sse] dynamic max_tokens={max_resp_tokens}")
 
         def stream():
             yield _sse("context", ctx)
@@ -375,7 +420,11 @@ def register_routes(app):
             chunk_idx = 0
 
             try:
-                for chunk in stream_glm_chat(full_messages):
+                for chunk in stream_glm_chat(
+                    full_messages,
+                    max_tokens=max_resp_tokens,
+                    thinking_enabled=show_reasoning,
+                ):
                     chunk_idx += 1
                     t = chunk.get("type")
                     c = chunk.get("content") or ""

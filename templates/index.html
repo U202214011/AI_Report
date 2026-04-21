@@ -581,19 +581,19 @@ createApp({
 
     buildPlotImages(plots) {
       const map = {};
-      (plots || []).forEach(function(p) {
+      (plots || []).forEach(p => {
         const key = this.slugifyKey(p.title);
         if (p.image) map[key] = p.image;
-      }, this);
+      });
       return map;
     },
 
     buildPlotImagesMeta(plots) {
       const map = {};
-      (plots || []).forEach(function(p) {
+      (plots || []).forEach(p => {
         const key = this.slugifyKey(p.title);
         if (p.image && p.meta) map[key] = p.meta;
-      }, this);
+      });
       return map;
     },
 
@@ -613,8 +613,8 @@ createApp({
     },
 
     scrollChatToBottom() {
-      this.$nextTick(function() {
-        var el = this.$refs.chatLog;
+      this.$nextTick(() => {
+        const el = this.$refs.chatLog;
         if (el) el.scrollTop = el.scrollHeight;
       });
     },
@@ -713,9 +713,8 @@ createApp({
         }
 
         this.exportTemplates = arr;
-        var self = this;
-        arr.forEach(function(t) {
-          if (t.is_user) self.userTemplateIds.push(t.id);
+        arr.forEach(t => {
+          if (t.is_user) this.userTemplateIds.push(t.id);
         });
 
         if (!this.selectedTemplateId && arr.length > 0) {
@@ -982,25 +981,11 @@ createApp({
       this.scrollChatToBottom();
 
       // Helper: find message in displayMessages by id and append text to rawContent
-      var self = this;
-      function appendToMsg(id, text) {
-        for (var i = 0; i < self.displayMessages.length; i++) {
-          if (self.displayMessages[i].id === id) {
-            self.displayMessages[i].rawContent += (text || '');
-            break;
-          }
-        }
-        self.scrollChatToBottom();
-      }
-      function setMsgContent(id, text) {
-        for (var i = 0; i < self.displayMessages.length; i++) {
-          if (self.displayMessages[i].id === id) {
-            self.displayMessages[i].rawContent = text || '';
-            break;
-          }
-        }
-        self.scrollChatToBottom();
-      }
+      const appendToMsg = (id, text) => {
+        const msg = this.displayMessages.find(m => m.id === id);
+        if (msg) msg.rawContent += (text || '');
+        this.scrollChatToBottom();
+      };
 
       try {
         const res = await fetch('/api/chat/sse', {
@@ -1020,52 +1005,49 @@ createApp({
 
         const reader  = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
-        var buffer = '';
-        var streamDone = false;
-        var finalContent = '';
+        let buffer = '';
+        let streamDone = false;
 
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          var idx;
+          let idx;
           while ((idx = buffer.indexOf('\n\n')) >= 0) {
             const raw = buffer.slice(0, idx);
             buffer = buffer.slice(idx + 2);
             const lines = raw.split('\n');
-            var ev = 'message', data = '';
+            let ev = 'message', data = '';
 
-            for (var li = 0; li < lines.length; li++) {
-              var line = lines[li];
+            for (const line of lines) {
               if (line.startsWith('event:')) ev = line.slice(6).trim();
               if (line.startsWith('data:'))  data += line.slice(5).trim();
             }
 
-            var obj = null;
+            let obj = null;
             if (data) {
               try { obj = JSON.parse(data); } catch(pe) { continue; }
             }
             if (!obj) continue;
 
             if (ev === 'notice') {
-              self.displayMessages.push({
-                id: self.nextMsgId++,
+              this.displayMessages.push({
+                id: this.nextMsgId++,
                 role: 'system',
                 kind: 'notice',
                 rawContent: '⚠️ ' + (obj.text || ''),
               });
-              self.scrollChatToBottom();
+              this.scrollChatToBottom();
             } else if (ev === 'error') {
               appendToMsg(contentId, '❌ ' + (obj.message || ''));
-            } else if (ev === 'reasoning' && self.showReasoning) {
+            } else if (ev === 'reasoning' && this.showReasoning) {
               appendToMsg(reasoningId, obj.text || '');
             } else if (ev === 'content') {
-              finalContent += (obj.text || '');
               appendToMsg(contentId, obj.text || '');
             } else if (ev === 'context') {
-              self.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + '）';
-              self.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
+              this.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + '）';
+              this.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;
               break;
@@ -1076,16 +1058,10 @@ createApp({
         }
 
         // Push final assistant message to llmMessages
-        // Get actual rawContent from displayMessages
-        var actualContent = '';
-        for (var ci = 0; ci < self.displayMessages.length; ci++) {
-          if (self.displayMessages[ci].id === contentId) {
-            actualContent = self.displayMessages[ci].rawContent || '';
-            break;
-          }
-        }
-        self.llmMessages.push({ role: 'assistant', content: actualContent });
-        await self.refreshCtxThrottled(true);
+        const contentMsg = this.displayMessages.find(m => m.id === contentId);
+        const actualContent = contentMsg ? (contentMsg.rawContent || '') : '';
+        this.llmMessages.push({ role: 'assistant', content: actualContent });
+        await this.refreshCtxThrottled(true);
 
       } catch (e) {
         appendToMsg(contentId, '❌ 会话请求失败：' + (e.message || e));

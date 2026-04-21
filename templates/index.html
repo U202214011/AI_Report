@@ -732,7 +732,7 @@ createApp({
     },
 
     async deleteTpl() {
-      var selectedId = this.selectedTemplateId;
+      const selectedId = this.selectedTemplateId;
       if (!selectedId || !this.userTemplateIds.includes(selectedId)) return;
       if (!confirm('确定要删除用户模板 "' + selectedId + '" 吗？此操作不可恢复。')) return;
       try {
@@ -801,7 +801,7 @@ createApp({
         });
 
         if (!res.ok) {
-          var msg = '导出失败';
+          let msg = '导出失败';
           try { const j = await res.json(); msg = j.message || msg; } catch(e2) {}
           alert(msg);
           return;

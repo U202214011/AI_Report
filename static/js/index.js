@@ -1,5 +1,7 @@
 const { createApp } = Vue;
 
+const REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes – abort stalled SSE streams
+
 createApp({
   delimiters: ['[[', ']]'],
 
@@ -433,7 +435,7 @@ createApp({
           }),
         });
         const j = await res.json();
-        this.ctxText  = j.message + '（约 ' + j.used_tokens_est + '/' + j.limit_tokens_est + '）';
+        this.ctxText  = j.message + '（约 ' + j.used_tokens_est + '/' + j.limit_tokens_est + ' tokens）';
         this.ctxLevel = j.level === 'danger' ? 'danger' : (j.level === 'warn' ? 'warn' : 'ok');
       } catch (e) {
         console.error('refreshCtx failed:', e);
@@ -584,6 +586,10 @@ createApp({
         this.scrollChatToBottom();
       };
 
+      // Abort controller: release the send button if the stream stalls for > 5 minutes
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
       try {
         const res = await fetch('/api/chat/sse', {
           method: 'POST',
@@ -593,6 +599,7 @@ createApp({
             messages:     this.llmMessages,
             show_reasoning: this.showReasoning,
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok || !res.body) {
@@ -643,7 +650,9 @@ createApp({
             } else if (ev === 'content') {
               appendToMsg(contentId, obj.text || '');
             } else if (ev === 'context') {
-              this.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + '）';
+              const trimmed = obj.trimmed_count || 0;
+              const suffix = trimmed > 0 ? '（已自动裁剪 ' + trimmed + ' 条旧消息）' : '';
+              this.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + ' tokens）' + suffix;
               this.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;
@@ -661,8 +670,13 @@ createApp({
         await this.refreshCtxThrottled(true);
 
       } catch (e) {
-        appendToMsg(contentId, '❌ 会话请求失败：' + (e.message || e));
+        if (e.name === 'AbortError') {
+          appendToMsg(contentId, '⏱️ 请求超时（超过5分钟），已自动取消。请尝试新建会话或精简上下文。');
+        } else {
+          appendToMsg(contentId, '❌ 会话请求失败：' + (e.message || e));
+        }
       } finally {
+        clearTimeout(abortTimer);
         this.sending = false;
       }
     },

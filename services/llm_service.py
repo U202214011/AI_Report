@@ -18,6 +18,15 @@ def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
         total += _estimate_tokens_from_text(role) + _estimate_tokens_from_text(content) + 6
     return total
 
+
+def estimate_messages_chars(messages: List[Dict[str, Any]]) -> int:
+    total = 0
+    for m in messages or []:
+        role = str(m.get("role", ""))
+        content = str(m.get("content", ""))
+        total += len(role) + len(content)
+    return total
+
 def _extract_delta_fields(delta):
     rc = (
         getattr(delta, "reasoning_content", None)

@@ -23,7 +23,7 @@ from services.report_service import (
     generate_pie_chart,
     normalize_time_range_for_debug
 )
-from services.llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens
+from services.llm_service import stream_glm_report, stream_glm_chat, estimate_messages_tokens, estimate_messages_chars
 from services.export_service import (
     list_export_templates,
     load_template_config,
@@ -112,7 +112,7 @@ def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
     }
 
 
-def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -> dict:
+def _context_status(used_chars: int, used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -> dict:
     ratio = used_tokens / limit_tokens if limit_tokens > 0 else 0
     if ratio >= CONTEXT_DANGER_RATIO:
         level = "danger"
@@ -126,6 +126,8 @@ def _context_status(used_tokens: int, limit_tokens: int = MODEL_CONTEXT_LIMIT) -
     return {
         "level": level,
         "message": msg,
+        "cumulative_chars_est": used_chars,
+        "cumulative_tokens_est": used_tokens,
         "used_tokens_est": used_tokens,
         "limit_tokens_est": limit_tokens,
         "ratio": round(ratio, 4)
@@ -332,8 +334,9 @@ def register_routes(app):
         messages = payload.get("messages") or []
         system_prompt = payload.get("systemPrompt") or ""
         full_messages = [{"role": "system", "content": system_prompt}] + (messages if isinstance(messages, list) else [])
+        used_chars = estimate_messages_chars(full_messages)
         used = estimate_messages_tokens(full_messages)
-        return jsonify(_context_status(used, MODEL_CONTEXT_LIMIT))
+        return jsonify(_context_status(used_chars, used, MODEL_CONTEXT_LIMIT))
 
     @app.route("/api/chat/sse", methods=["POST"])
     def chat_sse():
@@ -352,8 +355,9 @@ def register_routes(app):
             return jsonify({"message": "messages 不能为空"}), 400
 
         full_messages = [{"role": "system", "content": system_prompt}] + messages
+        used_chars = estimate_messages_chars(full_messages)
         used = estimate_messages_tokens(full_messages)
-        ctx = _context_status(used, MODEL_CONTEXT_LIMIT)
+        ctx = _context_status(used_chars, used, MODEL_CONTEXT_LIMIT)
         logger.info(f"[/api/chat/sse] context={ctx}")
 
         def stream():

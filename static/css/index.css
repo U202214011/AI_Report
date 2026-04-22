@@ -92,6 +92,14 @@ body {
 
 /* ---- Context badge — override Bootstrap colours ---- */
 .ctx-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+.ctx-usage-line {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  flex-shrink: 0;
+}
 
 .tiny { font-size: 12px; color: var(--muted); }
 .row-inline { display: flex; gap: 8px; margin: 8px 0; }

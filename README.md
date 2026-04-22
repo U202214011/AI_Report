@@ -17,6 +17,8 @@ AI_Report/
 ├── adapters/                 # 适配器层
 ├── models/                   # 数据模型
 ├── services/                 # 业务逻辑层
+│   ├── report_service.py     # Chinook 查询与聚合能力
+│   └── prompting/            # Prompt 组装解耦层（契约/数据网关）
 ├── charts/                   # 图表生成
 └── templates/                # Flask Jinja2 模板（前端页面）
     ├── index.html            # 主工作台（Vue 3 + Bootstrap 5）

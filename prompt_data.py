@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import json
 import os
 import re
@@ -6,15 +6,19 @@ import numpy as np
 from decimal import Decimal
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from services.report_service import (
-    build_period_trend,
-    build_dimension_trend,
-    run_query,
-    run_aggregation,
-    build_period_range,
-    build_total_series,
-    build_series_by_dimension,
-    select_top_categories
+from services.report_service import build_period_range
+from services.prompting import (
+    aggregate_dimension_metric,
+    aggregate_total_metric,
+    build_format_requirements,
+    build_markdown_constraints_text,
+    build_report_style_contract,
+    build_report_type_contract,
+    build_selected_dimensions_block,
+    fetch_dimension_rows_for_trend,
+    fetch_total_series,
+    group_series_by_dimension,
+    pick_top_categories,
 )
 from models.schema_config import METRICS, DIMENSIONS, ROLE_CONTEXT
 
@@ -261,16 +265,13 @@ def _sum_values(rows: List[Dict[str, Any]]) -> float:
 
 
 def _compute_total_metric(metric: str, granularity: str, since: Optional[str], until: Optional[str]) -> float:
-    sql, params = build_period_trend(metric, granularity, since, until)
-    rows = run_query(sql, params)
+    rows = aggregate_total_metric(metric, granularity, since, until)
 
     if metric != "avg_order_value":
         return _sum_values(rows)
 
-    sales_sql, sales_params = build_period_trend("sales_amount", granularity, since, until)
-    order_sql, order_params = build_period_trend("order_count", granularity, since, until)
-    sales_rows = run_query(sales_sql, sales_params)
-    order_rows = run_query(order_sql, order_params)
+    sales_rows = aggregate_total_metric("sales_amount", granularity, since, until)
+    order_rows = aggregate_total_metric("order_count", granularity, since, until)
     total_sales = _sum_values(sales_rows)
     total_orders = _sum_values(order_rows)
     return total_sales / total_orders if total_orders else 0.0
@@ -419,17 +420,7 @@ def _compute_dim_totals(rows: List[Dict[str, Any]], dim_key: str) -> Dict[str, A
 
 
 def _build_stat_dimension_summary(dim: str, metric: str, since: Optional[str], until: Optional[str], top_n: int) -> Dict[str, Any]:
-    payload = {
-        "reportType": "statistical",
-        "dimensions": [dim],
-        "metric": metric,
-        "since": since,
-        "until": until,
-        "topN": None,
-        "filters": {}
-    }
-
-    rows = run_aggregation(payload) or []
+    rows = aggregate_dimension_metric(metric, dim, since, until) or []
     if not rows:
         return {
             "dimension": dim,
@@ -447,7 +438,7 @@ def _build_stat_dimension_summary(dim: str, metric: str, since: Optional[str], u
         }
 
     total_value = _sum_values(rows)
-    top_categories = select_top_categories(rows, dim, top_n) or []
+    top_categories = pick_top_categories(rows, dim, top_n) or []
     top_rows = [r for r in rows if str(r.get(dim)) in top_categories] if top_categories else rows[:]
     other_rows = [r for r in rows if str(r.get(dim)) not in top_categories] if top_categories else []
 
@@ -755,119 +746,19 @@ def _build_total_series_text(series: List[Dict[str, Any]], metric: str) -> str:
 
 
 def _build_selected_dimensions_block(dims: List[str]) -> Dict[str, Any]:
-    selected_keys: List[str] = [d for d in (dims or []) if d in DIMENSION_LABELS_CN and d != "total"]
-    selected_titles: List[str] = [DIMENSION_LABELS_CN[k] for k in selected_keys]
-    selected_h2_lines = "\n".join([f"## {t}" for t in selected_titles]) if selected_titles else "（本次未选择维度）"
-    selected_titles_joined = "、".join(selected_titles) if selected_titles else "无"
-    return {
-        "selected_keys": selected_keys,
-        "selected_titles": selected_titles,
-        "selected_h2_lines": selected_h2_lines,
-        "selected_titles_joined": selected_titles_joined
-    }
+    return build_selected_dimensions_block(dims, DIMENSION_LABELS_CN)
 
 
 def _build_markdown_constraints_text(selected_dim_titles: List[str]) -> str:
-    base = (
-        "1) 仅输出 Markdown 正文，不要输出解释、前言、代码块围栏或额外说明。\n"
-        "2) 一级标题必须严格且按以下顺序输出，名称必须完全一致：\n"
-        "# 一、概览\n"
-        "# 二、维度关键发现\n"
-        "# 三、原因分析\n"
-        "# 四、建议\n"
-        "3) 除'维度关键发现'外，其他一级标题下不要创建维度型二级标题。\n"
-    )
-    if selected_dim_titles:
-        dim_lines = "\n".join([f"## {t}" for t in selected_dim_titles])
-        dim_part = (
-            "4) 在'维度关键发现'章节下，只能使用以下二级标题（名称必须完全一致）：\n"
-            f"{dim_lines}\n"
-            "5) 不得输出未在上述列表中的维度二级标题。\n"
-            "6) 若某个允许维度数据不足，可在该标题下说明'数据不足'，但不能改标题、不能删标题。\n"
-        )
-    else:
-        dim_part = (
-            "4) 本次未选择维度。在'维度关键发现'下不要输出二级标题，写本次'未选择维度分析'。\n"
-            "5) 不得新增任何维度型二级标题。\n"
-        )
-    tail = "7) 不要输出任何图片占位符（如 {{image:...}}）,图片由系统后处理插入。"
-    return base + dim_part + tail
+    return build_markdown_constraints_text(selected_dim_titles)
 
 
 def _build_report_type_contract(report_type: str) -> Dict[str, str]:
-    if report_type == "statistical":
-        return {
-            "report_type_name": "统计型",
-            "analysis_goal": "识别总体规模、结构分布、TopN贡献和集中度特征。",
-            "focus_points": "总量、占比、TopN、其他、集中度、维度对比",
-            "overview_rule": "先概述总体规模，再说明结构分布与头部集中情况。",
-            "reasoning_rule": "重点解释结构差异、头部贡献与潜在业务含义。",
-            "advice_rule": "建议围绕资源配置、重点维度经营、长尾优化展开。"
-        }
-    return {
-        "report_type_name": "趋势型",
-        "analysis_goal": "识别整体趋势方向、波动特征、异常节点及维度驱动因素。",
-        "focus_points": "趋势、拐点、峰谷、波动、增长贡献、异常期",
-        "overview_rule": "先判断整体走势，再说明关键拐点与阶段变化。",
-        "reasoning_rule": "重点解释维度驱动、波动来源及异常期可能原因。",
-        "advice_rule": "建议围绕趋势延续、风险预警、波动治理展开。"
-    }
+    return build_report_type_contract(report_type)
 
 
 def _build_report_style_contract(report_style: Optional[str]) -> Dict[str, str]:
-    style = (report_style or "standard").strip().lower()
-
-    # 定义基础字段
-    base_contracts = {
-        "simple": {
-            "style_name": "简明分析性",
-            "writing_goal": "先结论后展开，用最少文字表达最关键发现。",
-            "focus_rule": "优先输出3-5条关键结论，每条尽量附数字证据。",
-            "reasoning_rule": "只保留必要解释，避免冗长推演。",
-            "advice_rule": "建议简洁明晰，不超过3-5条。",
-            "language_rule": "语言精炼，管理层快速可读。"
-        },
-        "attribution": {
-            "style_name": "归因解析型",
-            "writing_goal": "不仅描述现象，还要解释变化由谁驱动、为什么发生。",
-            "focus_rule": "必须区分主因、次因，并说明结构占比与关键贡献来源。",
-            "reasoning_rule": "优先解释业务机制；无法验证因果必须标注推测",
-            "advice_rule": "建议需与原因分析一一对应。",
-            "language_rule": "强调因果链路和证据对应。"
-        },
-        "forecast": {
-            "style_name": "预测建议型",
-            "writing_goal": "在现有数据基础上做方向判断，并提出可执行动作。",
-            "focus_rule": "必须包含短期/中期走势、风险点与触发条件。",
-            "reasoning_rule": "预测必须基于已给数据，不得写成确定事实。",
-            "advice_rule": "建议要含优先级、动作对象、预期影响。",
-            "language_rule": "偏经营决策表达，强调行动性。"
-        },
-        "standard": {
-            "style_name": "综合标准型",
-            "writing_goal": "兼顾概览、发现、归因和建议，保持完整平衡。",
-            "focus_rule": "覆盖事实、分析和建议，不偏废。",
-            "reasoning_rule": "结论与证据必须对应。",
-            "advice_rule": "建议与关键发现保持一致。",
-            "language_rule": "专业、完整、稳定。"
-        }
-    }
-
-    contract = base_contracts.get(style, base_contracts["standard"]).copy()
-
-    # 新增：构建风格专属指令文本（将取代 STYLE_APPENDIX）
-    style_instructions = f"""- 风格类型：{contract['style_name']}
-- 写作目标：{contract['writing_goal']}
-- 输出侧重点：{contract['focus_rule']}
-- 推理要求：{contract['reasoning_rule']}
-- 建议要求：{contract['advice_rule']}
-- 语言要求：{contract['language_rule']}
-
-【风格专属指令】
-{contract['style_name']}：{contract['writing_goal']} 具体执行时，{contract['focus_rule']} 在分析原因时，{contract['reasoning_rule']} 提出建议时，{contract['advice_rule']} 整体语言风格要求：{contract['language_rule']}"""
-
-    contract["style_instructions"] = style_instructions
-    return contract
+    return build_report_style_contract(report_style)
 
 
 def _fallback_template() -> str:
@@ -876,8 +767,17 @@ def _fallback_template() -> str:
         "你是一位{role_context[analyst_level]}，负责{role_context[domain]}的{role_context[decision_type]}分析。\n\n"
         "【类型与风格】\n"
         "- 报告类型：{report_type_contract[report_type_name]}\n"
+        "- 类型目标：{report_type_contract[analysis_goal]}\n"
+        "- 类型重点：{report_type_contract[focus_points]}\n"
+        "- 概览写法：{report_type_contract[overview_rule]}\n"
+        "- 原因分析写法：{report_type_contract[reasoning_rule]}\n"
+        "- 建议写法：{report_type_contract[advice_rule]}\n"
         "- 报告风格：{report_style_contract[style_name]}\n"
-        "- 风格目标：{report_style_contract[writing_goal]}\n\n"
+        "- 风格目标：{report_style_contract[writing_goal]}\n"
+        "- 风格侧重点：{report_style_contract[focus_rule]}\n"
+        "- 风格推理要求：{report_style_contract[reasoning_rule]}\n"
+        "- 风格建议要求：{report_style_contract[advice_rule]}\n"
+        "- 风格语言要求：{report_style_contract[language_rule]}\n\n"
         "【数据事实】\n"
         "{data_summary[natural_fragments][overview_sentence]}\n\n"
         "【核心数据指标（按{series_granularity_label}）】\n"
@@ -885,10 +785,14 @@ def _fallback_template() -> str:
         "【维度结构（{dimension_analysis[dim_label]}）】\n"
         "{dim_table}\n\n"
         "【输出要求】\n"
-        "格式：{format_requirements[sections]}\n"
-        "风格：{format_requirements[tone]}\n"
-        "数字格式：{format_requirements[number_format]}\n"
-        "字数：{format_requirements[length_limit]}\n\n"
+        "- 结构：{format_requirements[sections]}\n"
+        "- 字数：{format_requirements[length_limit]}\n"
+        "- 数字格式：{format_requirements[number_format]}\n"
+        "- 数据边界：{format_requirements[data_boundary]}\n"
+        "- 证据约束：{format_requirements[evidence_rule]}\n"
+        "- 表达规范：{format_requirements[expression_rule]}\n"
+        "- 不确定性披露：{format_requirements[uncertainty_rule]}\n"
+        "- 禁止项：{format_requirements[forbidden_rule]}\n\n"
         "【Markdown结构硬约束】\n"
         "{markdown_constraints}"
     )
@@ -943,9 +847,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         }
 
         if report_type == "statistical":
-            sql, params = build_period_trend(metric, granularity, since, until)
-            rows = run_query(sql, params)
-            total_series = build_total_series(rows, granularity, periods=periods if periods else None)
+            total_series = fetch_total_series(metric, granularity, since, until, periods=periods if periods else None)
             total_metric = _compute_total_metric(metric, granularity, since, until) if metric == "avg_order_value" else sum(_safe_float(item.get("y")) for item in total_series)
             dimension_summaries = [_build_stat_dimension_summary(dim, metric, since, until, top_n) for dim in dims if dim != "total"]
 
@@ -954,26 +856,23 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
                 metric, metric_label, granularity, gran_label, since, until, top_n, dims, total_metric, dimension_summaries, total_series
             )
         else:
-            sql, params = build_period_trend(metric, granularity, since, until)
-            rows = run_query(sql, params)
-            series = build_total_series(rows, granularity, periods=periods if periods else None)
+            series = fetch_total_series(metric, granularity, since, until, periods=periods if periods else None)
 
             dimension_series = []
             for dim in [d for d in dims if d != "total"]:
-                sql, params = build_dimension_trend(metric, granularity, dim, since, until)
-                all_dim_rows = run_query(sql, params)
+                all_dim_rows = fetch_dimension_rows_for_trend(metric, granularity, dim, since, until)
 
                 totals_info = _compute_dim_totals(all_dim_rows, dim)
-                top_categories = select_top_categories(all_dim_rows, dim, top_n)
+                top_categories = pick_top_categories(all_dim_rows, dim, top_n)
 
                 display_dim_rows = all_dim_rows
                 if top_categories:
                     display_dim_rows = [r for r in all_dim_rows if r.get(dim) in top_categories]
 
-                all_series_by_dim = build_series_by_dimension(
+                all_series_by_dim = group_series_by_dimension(
                     all_dim_rows, dim, granularity, periods=periods if periods else None
                 )
-                display_series_by_dim = build_series_by_dimension(
+                display_series_by_dim = group_series_by_dimension(
                     display_dim_rows, dim, granularity, periods=periods if periods else None
                 )
 
@@ -1043,12 +942,7 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
         report_type_contract = _build_report_type_contract(report_type)
         report_style_contract = _build_report_style_contract(report_style)
 
-        format_requirements = {
-            "sections": "概览/维度关键发现/原因分析/建议",
-            "tone": f"{report_type_contract['report_type_name']} + {report_style_contract['style_name']}；{report_style_contract['writing_goal']}",
-            "number_format": "金额保留2位小数，比例保留2位小数",
-            "length_limit": "600-1000字"
-        }
+        format_requirements = build_format_requirements()
 
         total_series_text = _build_total_series_text((llm_data.get("series") if isinstance(llm_data, dict) else []) or [], metric)
 

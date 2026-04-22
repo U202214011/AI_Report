@@ -39,7 +39,6 @@ createApp({
       contextLimitTokens: 128000,
       lastCtxCheckAt: 0,
       ctxCheckTimer: null,
-      reportFirstCharLatencyMs: null,
 
       promptText: PROMPT_TEXT_NOT_GENERATED,
       plots: [],
@@ -83,9 +82,7 @@ createApp({
       return { flex: '1' };
     },
     ctxUsageText() {
-      const base = `累计字符 ${this.cumulativeChars}|（累计tokens ${this.cumulativeTokens}|${this.contextLimitTokens}）`;
-      if (this.reportFirstCharLatencyMs === null) return base;
-      return `${base} ｜首字符耗时 ${this.reportFirstCharLatencyMs.toFixed(2)} ms`;
+      return `累计字符 ${this.cumulativeChars}|（累计tokens ${this.cumulativeTokens}|${this.contextLimitTokens}）`;
     },
     showDeleteTplBtn() {
       return this.userTemplateIds.includes(this.selectedTemplateId);
@@ -458,7 +455,6 @@ createApp({
       this.plots          = [];
       this.promptText     = PROMPT_TEXT_NOT_GENERATED;
       this.hasPendingGeneratedPrompt = false;
-      this.reportFirstCharLatencyMs = null;
       this.displayMessages.push({
         id: this.nextMsgId++,
         role: 'system',
@@ -556,7 +552,6 @@ createApp({
       });
       this.llmMessages.push({ role: 'user', content: promptText });
       this.hasPendingGeneratedPrompt = false;
-      this.reportFirstCharLatencyMs = null;
       this.scrollChatToBottom();
 
       await this.refreshCtxThrottled(true);
@@ -601,13 +596,13 @@ createApp({
         const res = await fetch('/api/chat/sse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                systemPrompt: '你是资深数据分析助手，请严格依据给定报告数据进行回答。',
-                messages:     this.llmMessages,
-                show_reasoning: this.showReasoning,
-                client_trigger: clientTrigger || 'chat_followup',
-              }),
-            });
+          body: JSON.stringify({
+            systemPrompt: '你是资深数据分析助手，请严格依据给定报告数据进行回答。',
+            messages:     this.llmMessages,
+            show_reasoning: this.showReasoning,
+            client_trigger: clientTrigger || 'chat_followup',
+          }),
+        });
 
         if (!res.ok || !res.body) {
           appendToMsg(contentId, '请求失败：' + res.status);
@@ -656,17 +651,6 @@ createApp({
               appendToMsg(reasoningId, obj.text || '');
             } else if (ev === 'content') {
               appendToMsg(contentId, obj.text || '');
-            } else if (ev === 'timing' && obj.metric === 'start_report_to_first_char_ms') {
-              const ms = Number(obj.latency_ms || 0);
-              this.reportFirstCharLatencyMs = ms;
-              this.displayMessages.push({
-                id: this.nextMsgId++,
-                role: 'system',
-                kind: 'notice',
-                rawContent: `⏱️ 开始报告生成→首字符：${ms.toFixed(2)} ms`,
-              });
-              this.scrollChatToBottom();
-              console.info('[timing] start_report_to_first_char_ms=', ms);
             } else if (ev === 'context') {
               this.cumulativeChars = Number(obj.cumulative_chars_est || 0);
               this.cumulativeTokens = Number(obj.cumulative_tokens_est || obj.used_tokens_est || 0);

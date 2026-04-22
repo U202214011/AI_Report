@@ -1,1 +1,7 @@
 __pycache__/
+
+# IDE 配置
+idea/
+vscode/
+
+.env

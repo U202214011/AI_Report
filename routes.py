@@ -2,6 +2,7 @@ import logging
 import json
 import re
 import html
+import time
 from io import BytesIO
 from flask import request, jsonify, render_template, Response, send_file
 
@@ -143,7 +144,7 @@ def _sse_message(data) -> str:
 
 
 def _log_sse_chunk(route_name: str, idx: int, chunk_type: str, content: str):
-    logger.info(f"[{route_name}] chunk#{idx} type={chunk_type} len={len(content or '')}")
+    logger.debug(f"[{route_name}] chunk#{idx} type={chunk_type} len={len(content or '')}")
 
 
 def _build_preview_html(report_title: str, report_markdown: str, template_cfg: dict) -> str:
@@ -344,6 +345,7 @@ def register_routes(app):
         messages = payload.get("messages") or []
         system_prompt = payload.get("systemPrompt") or "你是资深数据分析助手，请严格依据给定报告数据进行回答。"
         show_reasoning = bool(payload.get("show_reasoning", True))
+        client_trigger = str(payload.get("client_trigger") or "")
 
         logger.info(f"[/api/chat/sse] payload_keys={list(payload.keys())}")
         logger.info(f"[/api/chat/sse] messages_count={(len(messages) if isinstance(messages, list) else -1)} show_reasoning={show_reasoning}")
@@ -364,6 +366,8 @@ def register_routes(app):
             yield _sse("context", ctx)
             yield _sse("meta", {"status": "start"})
             chunk_idx = 0
+            stream_started_at = time.perf_counter()
+            first_char_timing_sent = False
 
             try:
                 for chunk in stream_glm_chat(full_messages):
@@ -375,6 +379,21 @@ def register_routes(app):
 
                     if not c:
                         continue
+
+                    if (not first_char_timing_sent) and client_trigger == "start_report":
+                        latency_ms = (time.perf_counter() - stream_started_at) * 1000.0
+                        timing_payload = {
+                            "metric": "start_report_to_first_char_ms",
+                            "latency_ms": round(latency_ms, 2),
+                            "first_chunk_type": str(t),
+                        }
+                        yield _sse("timing", timing_payload)
+                        logger.info(
+                            "[/api/chat/sse] start_report_to_first_char_ms=%.2f first_chunk_type=%s",
+                            latency_ms,
+                            str(t),
+                        )
+                        first_char_timing_sent = True
 
                     if t == "error":
                         logger.error(f"[/api/chat/sse] model_error={c}")

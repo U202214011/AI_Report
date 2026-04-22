@@ -31,8 +31,9 @@ createApp({
       sending: false,
       nextMsgId: 1,
 
-      ctxText: '上下文充足',
-      ctxLevel: 'ok',
+      cumulativeChars: 0,
+      cumulativeTokens: 0,
+      contextLimitTokens: 128000,
       lastCtxCheckAt: 0,
       ctxCheckTimer: null,
 
@@ -76,12 +77,8 @@ createApp({
       }
       return { flex: '1' };
     },
-    ctxBadgeClass() {
-      return {
-        'bg-success':           this.ctxLevel === 'ok',
-        'bg-warning text-dark': this.ctxLevel === 'warn',
-        'bg-danger':            this.ctxLevel === 'danger',
-      };
+    ctxUsageText() {
+      return `累计字符 ${this.cumulativeChars}|（累计tokens ${this.cumulativeTokens}|${this.contextLimitTokens}）`;
     },
     showDeleteTplBtn() {
       return this.userTemplateIds.includes(this.selectedTemplateId);
@@ -416,12 +413,14 @@ createApp({
           }),
         });
         const j = await res.json();
-        this.ctxText  = j.message + '（约 ' + j.used_tokens_est + '/' + j.limit_tokens_est + '）';
-        this.ctxLevel = j.level === 'danger' ? 'danger' : (j.level === 'warn' ? 'warn' : 'ok');
+        this.cumulativeChars = Number(j.cumulative_chars_est || 0);
+        this.cumulativeTokens = Number(j.cumulative_tokens_est || j.used_tokens_est || 0);
+        this.contextLimitTokens = Number(j.limit_tokens_est || 128000);
       } catch (e) {
         console.error('refreshCtx failed:', e);
-        this.ctxText  = '上下文检查失败';
-        this.ctxLevel = 'warn';
+        this.cumulativeChars = 0;
+        this.cumulativeTokens = 0;
+        this.contextLimitTokens = 128000;
       }
     },
 
@@ -434,8 +433,6 @@ createApp({
 
     onChatInputChange() {
       clearTimeout(this.ctxCheckTimer);
-      this.ctxText  = '计算中...';
-      this.ctxLevel = 'warn';
       this.ctxCheckTimer = setTimeout(() => this.refreshCtxThrottled(false), 300);
     },
 
@@ -622,8 +619,9 @@ createApp({
             } else if (ev === 'content') {
               appendToMsg(contentId, obj.text || '');
             } else if (ev === 'context') {
-              this.ctxText  = obj.message + '（约 ' + obj.used_tokens_est + '/' + obj.limit_tokens_est + '）';
-              this.ctxLevel = obj.level === 'danger' ? 'danger' : (obj.level === 'warn' ? 'warn' : 'ok');
+              this.cumulativeChars = Number(obj.cumulative_chars_est || 0);
+              this.cumulativeTokens = Number(obj.cumulative_tokens_est || obj.used_tokens_est || 0);
+              this.contextLimitTokens = Number(obj.limit_tokens_est || 128000);
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;
               tDone = performance.now();

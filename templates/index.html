@@ -79,8 +79,8 @@
         </div>
 
         <div class="row-inline mt-3">
-          <button class="btn btn-primary btn-sm" style="flex:1;" @click="handleGenerate">生成并开始对话</button>
-          <button class="btn btn-secondary btn-sm" @click="newSession">新会话</button>
+          <button class="btn btn-primary btn-sm" style="flex:1;" @click="handleGeneratePrompt">生成Prompt与图像</button>
+          <button class="btn btn-success btn-sm" style="flex:1;" @click="handleStartReport">开始报告生成</button>
         </div>
         <button class="btn btn-success btn-sm w-100 mt-2" @click="handlePreviewModal">📊 显示数据查询结果</button>
 
@@ -196,7 +196,10 @@
         <textarea class="form-control form-control-sm" v-model="chatInput"
           placeholder="继续追问，例如：请解释 2024-Q3 的异常波动并给出行动建议"
           @input="onChatInputChange"></textarea>
-        <button class="btn btn-primary" :disabled="sending" @click="handleSend">发送</button>
+        <div class="composer-actions">
+          <button class="btn btn-secondary" :disabled="sending" @click="newSession">新对话</button>
+          <button class="btn btn-primary" :disabled="sending" @click="handleSend">发送</button>
+        </div>
       </div>
     </section>
 

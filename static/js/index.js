@@ -1,4 +1,7 @@
 const { createApp } = Vue;
+const PROMPT_TEXT_NOT_GENERATED = '尚未生成 Prompt';
+const PROMPT_TEXT_GENERATING = '生成中...';
+const PROMPT_TEXT_NOT_RETURNED = '未返回 prompt';
 
 createApp({
   delimiters: ['[[', ']]'],
@@ -37,8 +40,9 @@ createApp({
       lastCtxCheckAt: 0,
       ctxCheckTimer: null,
 
-      promptText: '尚未生成 Prompt',
+      promptText: PROMPT_TEXT_NOT_GENERATED,
       plots: [],
+      hasPendingGeneratedPrompt: false,
 
       exportTemplates: [],
       userTemplateIds: [],
@@ -98,8 +102,8 @@ createApp({
         '👋 欢迎使用 Chinook 报告对话工作台\n\n' +
         '**使用步骤：**\n' +
         '1️⃣ 左侧配置报告参数\n' +
-        '2️⃣ 点击"生成并开始对话"\n' +
-        '3️⃣ 中栏查看 LLM 回复\n' +
+        '2️⃣ 点击"生成Prompt与图像"\n' +
+        '3️⃣ 点击"开始报告生成"\n' +
         '4️⃣ 可继续追问，实现多轮对话',
     });
 
@@ -449,21 +453,23 @@ createApp({
       this.displayMessages = [];
       this.chatInput      = '';
       this.plots          = [];
-      this.promptText     = '尚未生成 Prompt';
+      this.promptText     = PROMPT_TEXT_NOT_GENERATED;
+      this.hasPendingGeneratedPrompt = false;
       this.displayMessages.push({
         id: this.nextMsgId++,
         role: 'system',
         kind: 'notice',
-        rawContent: '✨ 新会话已创建，请点击"生成并开始对话"',
+        rawContent: '✨ 新对话已创建，请先点击"生成Prompt与图像"，再点击"开始报告生成"',
       });
       this.scrollChatToBottom();
       this.refreshCtxThrottled(true);
     },
 
-    async handleGenerate() {
+    async handleGeneratePrompt() {
       const p = this.getPayload();
       this.plots = [];
-      this.promptText = '生成中...';
+      this.promptText = PROMPT_TEXT_GENERATING;
+      this.hasPendingGeneratedPrompt = false;
 
       try {
         const res = await fetch('/api/generate?debug=1', {
@@ -475,7 +481,7 @@ createApp({
         const j = await res.json();
 
         if (!res.ok || j.error || j.message) {
-          this.promptText = '尚未生成 Prompt';
+          this.promptText = PROMPT_TEXT_NOT_GENERATED;
           this.displayMessages.push({
             id: this.nextMsgId++,
             role: 'system',
@@ -490,7 +496,7 @@ createApp({
         this.plots = j.plots || [];
 
         if (!promptText) {
-          this.promptText = '未返回 prompt';
+          this.promptText = PROMPT_TEXT_NOT_RETURNED;
           this.displayMessages.push({
             id: this.nextMsgId++,
             role: 'assistant',
@@ -502,20 +508,18 @@ createApp({
         }
 
         this.promptText = promptText;
+        this.hasPendingGeneratedPrompt = true;
 
         this.displayMessages.push({
           id: this.nextMsgId++,
-          role: 'user',
-          kind: 'content',
-          rawContent: promptText,
+          role: 'system',
+          kind: 'notice',
+          rawContent: '✅ 已生成 Prompt 与图像，请点击"开始报告生成"。',
         });
-        this.llmMessages.push({ role: 'user', content: promptText });
         this.scrollChatToBottom();
-
-        await this.refreshCtxThrottled(true);
-        await this.runChatSSE();
       } catch (e) {
-        this.promptText = '尚未生成 Prompt';
+        this.promptText = PROMPT_TEXT_NOT_GENERATED;
+        this.hasPendingGeneratedPrompt = false;
         this.displayMessages.push({
           id: this.nextMsgId++,
           role: 'system',
@@ -524,6 +528,34 @@ createApp({
         });
         this.scrollChatToBottom();
       }
+    },
+
+    async handleStartReport() {
+      if (this.sending) return;
+      const promptText = (this.promptText || '').trim();
+      if (!this.hasPendingGeneratedPrompt || !promptText || promptText === PROMPT_TEXT_NOT_GENERATED || promptText === PROMPT_TEXT_GENERATING || promptText === PROMPT_TEXT_NOT_RETURNED) {
+        this.displayMessages.push({
+          id: this.nextMsgId++,
+          role: 'system',
+          kind: 'notice',
+          rawContent: '⚠️ 请先点击"生成Prompt与图像"。',
+        });
+        this.scrollChatToBottom();
+        return;
+      }
+
+      this.displayMessages.push({
+        id: this.nextMsgId++,
+        role: 'user',
+        kind: 'content',
+        rawContent: promptText,
+      });
+      this.llmMessages.push({ role: 'user', content: promptText });
+      this.hasPendingGeneratedPrompt = false;
+      this.scrollChatToBottom();
+
+      await this.refreshCtxThrottled(true);
+      await this.runChatSSE('start_report');
     },
 
     async handleSend() {
@@ -536,11 +568,11 @@ createApp({
       this.scrollChatToBottom();
 
       await this.refreshCtxThrottled(false);
-      await this.runChatSSE();
+      await this.runChatSSE('chat_followup');
     },
 
     // ---- SSE Streaming ----
-    async runChatSSE() {
+    async runChatSSE(clientTrigger) {
       if (this.sending) return;
       this.sending = true;
 
@@ -568,6 +600,7 @@ createApp({
             systemPrompt: '你是资深数据分析助手，请严格依据给定报告数据进行回答。',
             messages:     this.llmMessages,
             show_reasoning: this.showReasoning,
+            client_trigger: clientTrigger || 'chat_followup',
           }),
         });
 

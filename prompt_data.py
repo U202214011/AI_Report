@@ -876,8 +876,17 @@ def _fallback_template() -> str:
         "你是一位{role_context[analyst_level]}，负责{role_context[domain]}的{role_context[decision_type]}分析。\n\n"
         "【类型与风格】\n"
         "- 报告类型：{report_type_contract[report_type_name]}\n"
+        "- 类型目标：{report_type_contract[analysis_goal]}\n"
+        "- 类型重点：{report_type_contract[focus_points]}\n"
+        "- 概览写法：{report_type_contract[overview_rule]}\n"
+        "- 原因分析写法：{report_type_contract[reasoning_rule]}\n"
+        "- 建议写法：{report_type_contract[advice_rule]}\n"
         "- 报告风格：{report_style_contract[style_name]}\n"
-        "- 风格目标：{report_style_contract[writing_goal]}\n\n"
+        "- 风格目标：{report_style_contract[writing_goal]}\n"
+        "- 风格侧重点：{report_style_contract[focus_rule]}\n"
+        "- 风格推理要求：{report_style_contract[reasoning_rule]}\n"
+        "- 风格建议要求：{report_style_contract[advice_rule]}\n"
+        "- 风格语言要求：{report_style_contract[language_rule]}\n\n"
         "【数据事实】\n"
         "{data_summary[natural_fragments][overview_sentence]}\n\n"
         "【核心数据指标（按{series_granularity_label}）】\n"
@@ -885,10 +894,14 @@ def _fallback_template() -> str:
         "【维度结构（{dimension_analysis[dim_label]}）】\n"
         "{dim_table}\n\n"
         "【输出要求】\n"
-        "格式：{format_requirements[sections]}\n"
-        "风格：{format_requirements[tone]}\n"
-        "数字格式：{format_requirements[number_format]}\n"
-        "字数：{format_requirements[length_limit]}\n\n"
+        "- 结构：{format_requirements[sections]}\n"
+        "- 字数：{format_requirements[length_limit]}\n"
+        "- 数字格式：{format_requirements[number_format]}\n"
+        "- 数据边界：{format_requirements[data_boundary]}\n"
+        "- 证据约束：{format_requirements[evidence_rule]}\n"
+        "- 表达规范：{format_requirements[expression_rule]}\n"
+        "- 不确定性披露：{format_requirements[uncertainty_rule]}\n"
+        "- 禁止项：{format_requirements[forbidden_rule]}\n\n"
         "【Markdown结构硬约束】\n"
         "{markdown_constraints}"
     )
@@ -1045,9 +1058,13 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
 
         format_requirements = {
             "sections": "概览/维度关键发现/原因分析/建议",
-            "tone": f"{report_type_contract['report_type_name']} + {report_style_contract['style_name']}；{report_style_contract['writing_goal']}",
             "number_format": "金额保留2位小数，比例保留2位小数",
-            "length_limit": "600-1000字"
+            "length_limit": "600-1000字",
+            "data_boundary": "仅以本次提供的统计结果与时间区间为依据，不引用外部数据。",
+            "evidence_rule": "每条关键结论都需对应具体数字、占比、变化幅度或排序证据。",
+            "expression_rule": "先结论后解释，语句清晰、避免空泛描述，术语与口径保持一致。",
+            "uncertainty_rule": "对无法由现有数据验证的因果与预测，必须明确标注为推测或不确定。",
+            "forbidden_rule": "禁止编造数据、禁止与口径冲突、禁止输出与本次报告类型和风格无关的泛化段落。"
         }
 
         total_series_text = _build_total_series_text((llm_data.get("series") if isinstance(llm_data, dict) else []) or [], metric)

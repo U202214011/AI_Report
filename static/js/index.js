@@ -8,6 +8,8 @@ const CONTEXT_NOTICE_COOLDOWN_MS = 12000;
 const AUTO_COMPRESS_KEEP_RECENT = 8;
 const AUTO_COMPRESS_TRIGGER_RATIO = CONTEXT_WARN_RATIO;
 const AUTO_COMPRESS_SUMMARY_MAX_CHARS = 1400;
+const AUTO_COMPRESS_MIN_EXCESS_MESSAGES = 2;
+const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
 
 createApp({
   delimiters: ['[[', ']]'],
@@ -218,20 +220,20 @@ createApp({
         used += line.length;
       }
       if (!lines.length) return '';
-      return '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：\n' + lines.join('\n');
+      return AUTO_COMPRESS_SUMMARY_PREFIX + '\n' + lines.join('\n');
     },
 
     async autoCompressHistoryIfNeeded() {
       if (this.contextUsageRatio < AUTO_COMPRESS_TRIGGER_RATIO) return false;
       if (!Array.isArray(this.llmMessages)) return false;
-      if (this.llmMessages.length <= AUTO_COMPRESS_KEEP_RECENT + 2) return false;
+      if (this.llmMessages.length <= AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES) return false;
 
       const keepRecent = this.llmMessages.slice(-AUTO_COMPRESS_KEEP_RECENT);
       const toCompress = this.llmMessages.slice(0, -AUTO_COMPRESS_KEEP_RECENT);
       const summary = this.buildHistorySummary(toCompress, AUTO_COMPRESS_SUMMARY_MAX_CHARS);
       if (!summary) return false;
 
-      this.llmMessages = [{ role: 'assistant', content: summary }, ...keepRecent];
+      this.llmMessages = [{ role: 'system', content: summary }, ...keepRecent];
       this.pushSystemNotice(`⚠️ 上下文较长，已自动压缩 ${toCompress.length} 条历史消息，并保留最近 ${AUTO_COMPRESS_KEEP_RECENT} 条。`);
       await this.refreshCtxThrottled(true);
       return true;

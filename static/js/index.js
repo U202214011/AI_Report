@@ -390,7 +390,7 @@ createApp({
         const blob = await res.blob();
         const safeBaseName = String(reportTitle || '数据分析报告')
           .replace(/[\\/:*?"<>|]+/g, '_')
-          .trim() || 'report';
+          .trim() || '数据分析报告';
         const filename = safeBaseName.endsWith('.docx') ? safeBaseName : `${safeBaseName}.docx`;
 
         const url = URL.createObjectURL(blob);

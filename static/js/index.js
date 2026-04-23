@@ -455,7 +455,7 @@ createApp({
       const lines = text.split(/\r?\n/);
       for (const line of lines) {
         const s = line.replace(/^\s+/, '');
-        if (!s.startsWith('# ') || s.startsWith('##')) continue;
+        if (!s.startsWith('# ')) continue;
         const title = s.slice(2).trim();
         if (title) return title;
       }

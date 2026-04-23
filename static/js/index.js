@@ -10,7 +10,7 @@ const AUTO_COMPRESS_TRIGGER_RATIO = CONTEXT_WARN_RATIO;
 const AUTO_COMPRESS_SUMMARY_MAX_CHARS = 1400;
 const AUTO_COMPRESS_MIN_EXCESS_MESSAGES = 2;
 const AUTO_COMPRESS_MIN_TOTAL_MESSAGES = AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES;
-const AUTO_COMPRESS_SUMMARY_MARKER = '[AUTO_COMPRESSED_HISTORY]';
+const COMPRESSED_SUMMARY_MARKER = '[AUTO_COMPRESSED_HISTORY]';
 const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
 
 createApp({
@@ -208,15 +208,22 @@ createApp({
       return clean.slice(0, limit) + '…';
     },
 
+    roleLabelForSummary(roleName) {
+      const mapping = {
+        user: '用户',
+        assistant: '助手',
+        system: '系统',
+      };
+      return mapping[roleName] || '未知角色';
+    },
+
     buildHistorySummary(historyMessages, maxChars) {
       const lines = [];
       const limit = Number(maxChars || AUTO_COMPRESS_SUMMARY_MAX_CHARS);
       let used = 0;
       for (const msg of historyMessages || []) {
         const roleName = (msg && msg.role) || '';
-        const role = roleName === 'user'
-          ? '用户'
-          : (roleName === 'assistant' ? '助手' : (roleName === 'system' ? '系统' : '未知角色'));
+        const role = this.roleLabelForSummary(roleName);
         const content = this.shortenForSummary((msg && msg.content) || '', 120);
         if (!content) continue;
         const line = `- ${role}：${content}`;
@@ -225,7 +232,7 @@ createApp({
         used += line.length;
       }
       if (!lines.length) return '';
-      return AUTO_COMPRESS_SUMMARY_MARKER + '\n' + AUTO_COMPRESS_SUMMARY_PREFIX + '\n' + lines.join('\n');
+      return COMPRESSED_SUMMARY_MARKER + '\n' + AUTO_COMPRESS_SUMMARY_PREFIX + '\n' + lines.join('\n');
     },
 
     async autoCompressHistoryIfNeeded() {
@@ -233,7 +240,7 @@ createApp({
       if (!Array.isArray(this.llmMessages)) return false;
       const preservedSystemMessages = this.llmMessages.filter(m => {
         const content = String((m && m.content) || '');
-        return (m && m.role) === 'system' && !content.includes(AUTO_COMPRESS_SUMMARY_MARKER);
+        return (m && m.role) === 'system' && !content.includes(COMPRESSED_SUMMARY_MARKER);
       });
       const conversationMessages = this.llmMessages.filter(m => (m && m.role) !== 'system');
       if (conversationMessages.length <= AUTO_COMPRESS_MIN_TOTAL_MESSAGES) return false;
@@ -243,7 +250,7 @@ createApp({
       const summary = this.buildHistorySummary(toCompress, AUTO_COMPRESS_SUMMARY_MAX_CHARS);
       if (!summary) return false;
 
-      this.llmMessages = [...preservedSystemMessages, { id: 'auto_summary_' + Date.now(), role: 'system', content: summary }, ...keepRecent];
+      this.llmMessages = [...preservedSystemMessages, { id: this.nextMsgId++, role: 'system', content: summary }, ...keepRecent];
       this.pushSystemNotice(`⚠️ 上下文较长，已自动压缩 ${toCompress.length} 条历史消息，并保留最近 ${AUTO_COMPRESS_KEEP_RECENT} 条。`);
       await this.refreshCtxThrottled(true);
       return true;

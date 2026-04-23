@@ -9,6 +9,7 @@ const AUTO_COMPRESS_KEEP_RECENT = 8;
 const AUTO_COMPRESS_TRIGGER_RATIO = CONTEXT_WARN_RATIO;
 const AUTO_COMPRESS_SUMMARY_MAX_CHARS = 1400;
 const AUTO_COMPRESS_MIN_EXCESS_MESSAGES = 2;
+const AUTO_COMPRESS_MIN_TOTAL_MESSAGES = AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES;
 const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
 
 createApp({
@@ -211,7 +212,8 @@ createApp({
       const limit = Number(maxChars || AUTO_COMPRESS_SUMMARY_MAX_CHARS);
       let used = 0;
       for (const msg of historyMessages || []) {
-        const role = (msg && msg.role) === 'user' ? '用户' : '助手';
+        const roleName = (msg && msg.role) || '';
+        const role = roleName === 'user' ? '用户' : (roleName === 'system' ? '系统' : '助手');
         const content = this.shortenForSummary((msg && msg.content) || '', 120);
         if (!content) continue;
         const line = `- ${role}：${content}`;
@@ -226,14 +228,19 @@ createApp({
     async autoCompressHistoryIfNeeded() {
       if (this.contextUsageRatio < AUTO_COMPRESS_TRIGGER_RATIO) return false;
       if (!Array.isArray(this.llmMessages)) return false;
-      if (this.llmMessages.length <= AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES) return false;
+      const preservedSystemMessages = this.llmMessages.filter(m => {
+        const content = String((m && m.content) || '');
+        return (m && m.role) === 'system' && !content.startsWith(AUTO_COMPRESS_SUMMARY_PREFIX);
+      });
+      const conversationMessages = this.llmMessages.filter(m => (m && m.role) !== 'system');
+      if (conversationMessages.length <= AUTO_COMPRESS_MIN_TOTAL_MESSAGES) return false;
 
-      const keepRecent = this.llmMessages.slice(-AUTO_COMPRESS_KEEP_RECENT);
-      const toCompress = this.llmMessages.slice(0, -AUTO_COMPRESS_KEEP_RECENT);
+      const keepRecent = conversationMessages.slice(-AUTO_COMPRESS_KEEP_RECENT);
+      const toCompress = conversationMessages.slice(0, -AUTO_COMPRESS_KEEP_RECENT);
       const summary = this.buildHistorySummary(toCompress, AUTO_COMPRESS_SUMMARY_MAX_CHARS);
       if (!summary) return false;
 
-      this.llmMessages = [{ role: 'system', content: summary }, ...keepRecent];
+      this.llmMessages = [...preservedSystemMessages, { role: 'system', content: summary }, ...keepRecent];
       this.pushSystemNotice(`⚠️ 上下文较长，已自动压缩 ${toCompress.length} 条历史消息，并保留最近 ${AUTO_COMPRESS_KEEP_RECENT} 条。`);
       await this.refreshCtxThrottled(true);
       return true;

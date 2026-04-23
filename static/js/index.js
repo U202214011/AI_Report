@@ -388,9 +388,10 @@ createApp({
         }
 
         const blob = await res.blob();
-        const disposition = res.headers.get('Content-Disposition') || '';
-        const matched = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
-        const filename = decodeURIComponent((matched && (matched[1] || matched[2])) || 'report.docx');
+        const safeBaseName = String(reportTitle || '数据分析报告')
+          .replace(/[\\/:*?"<>|]+/g, '_')
+          .trim() || 'report';
+        const filename = safeBaseName.endsWith('.docx') ? safeBaseName : `${safeBaseName}.docx`;
 
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

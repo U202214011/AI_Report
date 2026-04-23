@@ -793,11 +793,11 @@ def register_routes(app):
     def export_template_preview_docx():
         payload = request.get_json() or {}
         template_config = payload.get("template_config") or {}
-        report_title = (payload.get("report_title") or "").strip() or "模板预览"
+        report_title = (payload.get("report_title") or "").strip() or "2026Q1 销售分析报告"
         report_markdown = (payload.get("report_markdown") or "").strip()
 
         if not report_markdown:
-            report_markdown = "# 模板预览\n\n这是一段正文预览。"
+            report_markdown = "# 一、概览\n这是一段正文预览。"
 
         if not isinstance(template_config, dict) or not template_config:
             return jsonify({"message": "template_config 不能为空"}), 400

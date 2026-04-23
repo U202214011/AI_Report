@@ -185,7 +185,6 @@
       <div class="panel-head">
         <strong>LLM 思考与响应（多轮对话）</strong>
       </div>
-      <div class="ctx-usage-line">[[ ctxUsageText ]]</div>
       <div class="chat-log" ref="chatLog">
         <div v-for="msg in displayMessages" :key="msg.id" :class="getMsgClass(msg)">
           <div v-if="msg.kind !== 'notice'" class="msg-role">[[ getMsgRoleLabel(msg) ]]</div>

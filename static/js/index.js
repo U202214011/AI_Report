@@ -81,9 +81,6 @@ createApp({
       }
       return { flex: '1' };
     },
-    ctxUsageText() {
-      return `累计字符 ${this.cumulativeChars}|（累计tokens ${this.cumulativeTokens}|${this.contextLimitTokens}）`;
-    },
     showDeleteTplBtn() {
       return this.userTemplateIds.includes(this.selectedTemplateId);
     },

@@ -81,9 +81,6 @@ createApp({
       }
       return { flex: '1' };
     },
-    ctxUsageText() {
-      return `累计字符 ${this.cumulativeChars}|（累计tokens ${this.cumulativeTokens}|${this.contextLimitTokens}）`;
-    },
     showDeleteTplBtn() {
       return this.userTemplateIds.includes(this.selectedTemplateId);
     },
@@ -362,8 +359,8 @@ createApp({
       }
 
       const templateId  = this.selectedTemplateId || 'cn_management_a4';
-      const inferredTitle = this.extractReportTitleFromMarkdown(reportMarkdown);
-      const reportTitle = (this.exportTitle || '').trim() || inferredTitle || '数据分析报告';
+      const DEFAULT_REPORT_NAME = '数据分析报告';
+      const reportTitle = (this.exportTitle || '').trim() || DEFAULT_REPORT_NAME;
       const useCustom   = this.useCustomTpl;
       const customCfg   = useCustom ? this.buildCustomTemplateConfig() : null;
 
@@ -391,9 +388,10 @@ createApp({
         }
 
         const blob = await res.blob();
-        const disposition = res.headers.get('Content-Disposition') || '';
-        const matched = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
-        const filename = decodeURIComponent((matched && (matched[1] || matched[2])) || 'report.docx');
+        const safeBaseName = String(reportTitle)
+          .replace(/[\\/:*?"<>|]+/g, '_')
+          .trim();
+        const filename = /\.docx$/i.test(safeBaseName) ? safeBaseName : `${safeBaseName}.docx`;
 
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

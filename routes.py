@@ -135,7 +135,7 @@ def _context_status(used_chars: int, used_tokens: int, limit_tokens: int = MODEL
     else:
         level = "ok"
         msg = "上下文充足。"
-    return {
+    context_payload = {
         "level": level,
         "message": msg,
         "cumulative_chars_est": used_chars,
@@ -144,6 +144,15 @@ def _context_status(used_chars: int, used_tokens: int, limit_tokens: int = MODEL
         "limit_tokens_est": limit_tokens,
         "ratio": round(ratio, 4)
     }
+    logger.info(
+        "[LLM_CONTEXT] cumulative_chars_est=%s cumulative_tokens_est=%s limit_tokens_est=%s ratio=%s level=%s",
+        context_payload["cumulative_chars_est"],
+        context_payload["cumulative_tokens_est"],
+        context_payload["limit_tokens_est"],
+        context_payload["ratio"],
+        context_payload["level"],
+    )
+    return context_payload
 
 
 def _sse(event: str, data) -> str:
@@ -857,7 +866,7 @@ def register_routes(app):
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
 
-        report_title = report_title or _extract_title_from_markdown(markdown_text) or "数据分析报告"
+        report_title = report_title or "数据分析报告"
 
         try:
             markdown_text, inject_debug = inject_placeholders_by_sections(

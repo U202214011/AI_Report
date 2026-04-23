@@ -454,8 +454,10 @@ createApp({
       if (!text) return '';
       const lines = text.split(/\r?\n/);
       for (const line of lines) {
-        const m = line.match(/^\s*#\s+(.+?)\s*$/);
-        if (m && m[1]) return m[1].trim();
+        const s = line.replace(/^\s+/, '');
+        if (!s.startsWith('# ') || s.startsWith('##')) continue;
+        const title = s.slice(2).trim();
+        if (title) return title;
       }
       return '';
     },

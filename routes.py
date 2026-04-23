@@ -68,9 +68,12 @@ def _safe_float(v):
 
 def _extract_title_from_markdown(markdown_text: str) -> str:
     for line in (markdown_text or "").splitlines():
-        m = re.match(r"^\s*#\s+(.+?)\s*$", line)
-        if m and m.group(1):
-            return m.group(1).strip()
+        s = line.lstrip()
+        if not s.startswith("# ") or s.startswith("##"):
+            continue
+        title = s[2:].strip()
+        if title:
+            return title
     return ""
 
 

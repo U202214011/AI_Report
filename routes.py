@@ -866,7 +866,7 @@ def register_routes(app):
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
 
-        report_title = report_title or _extract_title_from_markdown(markdown_text) or "数据分析报告"
+        report_title = report_title or "数据分析报告"
 
         try:
             markdown_text, inject_debug = inject_placeholders_by_sections(

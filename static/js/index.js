@@ -359,9 +359,8 @@ createApp({
       }
 
       const templateId  = this.selectedTemplateId || 'cn_management_a4';
-      const inferredTitle = this.extractReportTitleFromMarkdown(reportMarkdown);
       const DEFAULT_REPORT_NAME = '数据分析报告';
-      const reportTitle = (this.exportTitle || '').trim() || inferredTitle || DEFAULT_REPORT_NAME;
+      const reportTitle = (this.exportTitle || '').trim() || DEFAULT_REPORT_NAME;
       const useCustom   = this.useCustomTpl;
       const customCfg   = useCustom ? this.buildCustomTemplateConfig() : null;
 

@@ -258,8 +258,9 @@
               <div class="col">
                 <label class="form-label small mb-1">页面尺寸</label>
                 <select v-model="page_size" class="form-select form-select-sm">
+                  <option value="A3">A3</option>
                   <option value="A4">A4</option>
-                  <option value="Letter">Letter</option>
+                  <option value="A5">A5</option>
                 </select>
               </div>
               <div class="col">
@@ -289,6 +290,8 @@
           <div class="card-body p-2">
             <label class="form-label small mb-1">页眉文字</label>
             <input v-model="header_text" type="text" placeholder="（空=不显示页眉）" class="form-control form-control-sm" />
+            <label class="form-label small mt-2 mb-1">页眉字体</label>
+            <input v-model="header_font" type="text" placeholder="如：宋体 / 微软雅黑" class="form-control form-control-sm" />
             <label class="form-label small mt-2 mb-1">页眉对齐</label>
             <select v-model="header_align" class="form-select form-select-sm">
               <option value="center">居中</option>
@@ -303,6 +306,8 @@
               <div class="col"><label class="form-label small mb-1">页码前缀</label><input v-model="footer_prefix" class="form-control form-control-sm" /></div>
               <div class="col"><label class="form-label small mb-1">页码后缀</label><input v-model="footer_suffix" class="form-control form-control-sm" /></div>
             </div>
+            <label class="form-label small mt-2 mb-1">页脚字体</label>
+            <input v-model="footer_font" type="text" placeholder="如：宋体 / 微软雅黑" class="form-control form-control-sm" />
             <label class="form-label small mt-2 mb-1">页脚对齐</label>
             <select v-model="footer_align" class="form-select form-select-sm">
               <option value="center">居中</option>

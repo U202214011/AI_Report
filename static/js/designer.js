@@ -39,9 +39,9 @@ createApp({
       page_size: 'A4', page_orient: 'portrait',
       m_top: 2.5, m_right: 2.2, m_bottom: 2.5, m_left: 2.2,
 
-      header_text: '', header_align: 'center',
+      header_text: '', header_align: 'center', header_font: '宋体',
       footer_pagenum: true, footer_total: false,
-      footer_prefix: '第 ', footer_suffix: ' 页', footer_align: 'center',
+      footer_prefix: '第 ', footer_suffix: ' 页', footer_align: 'center', footer_font: '宋体',
 
       preview_md: `# 一、概览
 本季度销售额同比增长 **12.8%**。
@@ -113,8 +113,8 @@ createApp({
           list:  { alignment: 'left', line_spacing: 1.3, space_before_pt: 0, space_after_pt: 4, first_line_indent_chars: 0 }
         },
         header_footer: {
-          header: { text: this.header_text||'', alignment: this.header_align||'center' },
-          footer: { show_page_number: this.footer_pagenum, prefix: this.footer_prefix, suffix: this.footer_suffix, show_total_pages: this.footer_total, alignment: this.footer_align||'center' }
+          header: { text: this.header_text||'', alignment: this.header_align||'center', font_family: this.header_font||'宋体' },
+          footer: { show_page_number: this.footer_pagenum, prefix: this.footer_prefix, suffix: this.footer_suffix, show_total_pages: this.footer_total, alignment: this.footer_align||'center', font_family: this.footer_font||'宋体' }
         },
         image: { max_width_cm: 16, alignment: 'center' },
         paragraph: { line_spacing: Number(this.line_spacing)||1.5, space_before_pt: 4, space_after_pt: 6, first_line_indent_chars: Number(this.indent_chars)||2 }
@@ -246,12 +246,14 @@ createApp({
       const hdr = hf.header||{};
       if (hdr.text      != null) this.header_text  = hdr.text;
       if (hdr.alignment != null) this.header_align = hdr.alignment;
+      if (hdr.font_family != null) this.header_font = hdr.font_family;
       const ftr = hf.footer||{};
       if (ftr.show_page_number != null) this.footer_pagenum = !!ftr.show_page_number;
       if (ftr.prefix           != null) this.footer_prefix  = ftr.prefix;
       if (ftr.suffix           != null) this.footer_suffix  = ftr.suffix;
       if (ftr.show_total_pages != null) this.footer_total   = !!ftr.show_total_pages;
       if (ftr.alignment        != null) this.footer_align   = ftr.alignment;
+      if (ftr.font_family      != null) this.footer_font    = ftr.font_family;
     },
     async deleteTpl() {
       const id = this.selectedLoadId;

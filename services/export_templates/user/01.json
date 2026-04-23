@@ -18,7 +18,7 @@
       "size_pt": 20,
       "bold": true,
       "italic": false,
-      "color": "#000000"
+      "color": "#4f81bd"
     },
     "h1": {
       "family": "微软雅黑",
@@ -29,7 +29,7 @@
     },
     "h2": {
       "family": "微软雅黑",
-      "size_pt": 13,
+      "size_pt": 16,
       "bold": true,
       "italic": false,
       "color": "#000000"
@@ -85,7 +85,7 @@
       "line_spacing": 1.5,
       "space_before_pt": 12,
       "space_after_pt": 4,
-      "first_line_indent_chars": 0,
+      "first_line_indent_chars": 2,
       "keep_with_next": true
     },
     "h3": {
@@ -122,14 +122,16 @@
   "header_footer": {
     "header": {
       "text": "AI生成仅供参考",
-      "alignment": "left"
+      "alignment": "right",
+      "font_family": "楷体"
     },
     "footer": {
       "show_page_number": true,
       "prefix": "第 ",
       "suffix": " 页",
       "show_total_pages": false,
-      "alignment": "center"
+      "alignment": "center",
+      "font_family": "楷体"
     }
   },
   "image": {

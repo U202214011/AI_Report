@@ -66,6 +66,14 @@ def _safe_float(v):
         return 0.0
 
 
+def _extract_title_from_markdown(markdown_text: str) -> str:
+    for line in (markdown_text or "").splitlines():
+        m = re.match(r"^\s*#\s+(.+?)\s*$", line)
+        if m and m.group(1):
+            return m.group(1).strip()
+    return ""
+
+
 def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
     prompt_data = raw_output.get("promptData") or {}
     report_type = normalized.get("reportType")
@@ -823,7 +831,7 @@ def register_routes(app):
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
         template_config = payload.get("template_config")
-        report_title = (payload.get("report_title") or "").strip() or "数据分析报告"
+        report_title = (payload.get("report_title") or "").strip()
 
         plot_images = payload.get("plot_images") or {}
         plot_images_meta = payload.get("plot_images_meta") or {}
@@ -845,6 +853,8 @@ def register_routes(app):
 
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
+
+        report_title = report_title or _extract_title_from_markdown(markdown_text) or "数据分析报告"
 
         try:
             markdown_text, inject_debug = inject_placeholders_by_sections(

@@ -5,7 +5,6 @@ import re
 import json
 import base64
 from io import BytesIO
-from datetime import datetime
 
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -1187,5 +1186,4 @@ def render_markdown_to_docx_bytes(
 
 
 def build_export_filename(prefix: str = "报告", ext: str = "docx") -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{_safe_filename(prefix)}_{ts}.{ext}"
+    return f"{_safe_filename(prefix)}.{ext}"

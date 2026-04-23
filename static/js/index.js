@@ -388,7 +388,7 @@ createApp({
         }
 
         const blob = await res.blob();
-        const safeBaseName = String(reportTitle || DEFAULT_REPORT_NAME)
+        const safeBaseName = String(reportTitle)
           .replace(/[\\/:*?"<>|]+/g, '_')
           .trim();
         const filename = /\.docx$/i.test(safeBaseName) ? safeBaseName : `${safeBaseName}.docx`;

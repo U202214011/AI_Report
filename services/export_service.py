@@ -5,10 +5,9 @@ import re
 import json
 import base64
 from io import BytesIO
-from datetime import datetime
 
 from docx import Document
-from docx.shared import Pt, Cm, Inches, RGBColor
+from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml.ns import qn
@@ -353,12 +352,14 @@ def _parse_markdown_lines(md_text: str) -> List[Tuple[str, str, int]]:
 
 def _set_page_size(section, page_size: str):
     ps = str(page_size or "A4").lower()
-    if ps == "letter":
-        section.page_width = Inches(8.5)
-        section.page_height = Inches(11)
-    else:
-        section.page_width = Cm(21.0)
-        section.page_height = Cm(29.7)
+    page_sizes_cm = {
+        "a3": (29.7, 42.0),
+        "a4": (21.0, 29.7),
+        "a5": (14.8, 21.0),
+    }
+    width_cm, height_cm = page_sizes_cm.get(ps, page_sizes_cm["a4"])
+    section.page_width = Cm(width_cm)
+    section.page_height = Cm(height_cm)
 
 
 def _set_page_layout(doc: Document, cfg: Dict[str, Any]):
@@ -402,9 +403,14 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
         p = sec.header.paragraphs[0] if sec.header.paragraphs else sec.header.add_paragraph()
         p.clear()
         run = p.add_run(str(header_cfg["text"]))
-        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
+        header_family = str(header_cfg.get("font_family") or body_font.get("family", "宋体"))
+        header_size = float(header_cfg.get("font_size_pt", body_font.get("size_pt", 10)))
+        _set_run_font(run, header_family, header_size, bold=False, color=body_font.get("color"))
+        p.paragraph_format.alignment = _ALIGNMENT_MAP.get(header_cfg.get("alignment", "center"), WD_ALIGN_PARAGRAPH.CENTER)
 
     footer_cfg = hf.get("footer", {})
+    footer_family = str(footer_cfg.get("font_family") or body_font.get("family", "宋体"))
+    footer_size = float(footer_cfg.get("font_size_pt", body_font.get("size_pt", 10)))
     if footer_cfg.get("show_page_number"):
         p = sec.footer.paragraphs[0] if sec.footer.paragraphs else sec.footer.add_paragraph()
         p.clear()
@@ -415,22 +421,22 @@ def _apply_header_footer(doc: Document, cfg: Dict[str, Any]):
         align = footer_cfg.get("alignment", "center")
 
         r1 = p.add_run(prefix)
-        _set_run_font(r1, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
+        _set_run_font(r1, footer_family, footer_size, color=body_font.get("color"))
         _add_field_run(p, "PAGE")
 
         if total_format:
             r2 = p.add_run(" / ")
-            _set_run_font(r2, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
+            _set_run_font(r2, footer_family, footer_size, color=body_font.get("color"))
             _add_field_run(p, "NUMPAGES")
 
         r3 = p.add_run(suffix)
-        _set_run_font(r3, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), color=body_font.get("color"))
+        _set_run_font(r3, footer_family, footer_size, color=body_font.get("color"))
         p.paragraph_format.alignment = _ALIGNMENT_MAP.get(align, WD_ALIGN_PARAGRAPH.CENTER)
     elif footer_cfg.get("text"):
         p = sec.footer.paragraphs[0] if sec.footer.paragraphs else sec.footer.add_paragraph()
         p.clear()
         run = p.add_run(str(footer_cfg["text"]))
-        _set_run_font(run, body_font.get("family", "宋体"), float(body_font.get("size_pt", 10)), bold=False, color=body_font.get("color"))
+        _set_run_font(run, footer_family, footer_size, bold=False, color=body_font.get("color"))
         p.paragraph_format.alignment = _ALIGNMENT_MAP.get(footer_cfg.get("alignment", "center"), WD_ALIGN_PARAGRAPH.CENTER)
 
 
@@ -1180,5 +1186,4 @@ def render_markdown_to_docx_bytes(
 
 
 def build_export_filename(prefix: str = "报告", ext: str = "docx") -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{_safe_filename(prefix)}_{ts}.{ext}"
+    return f"{_safe_filename(prefix)}.{ext}"

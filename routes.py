@@ -66,6 +66,17 @@ def _safe_float(v):
         return 0.0
 
 
+def _extract_title_from_markdown(markdown_text: str) -> str:
+    for line in (markdown_text or "").splitlines():
+        s = line.lstrip()
+        if not s.startswith("# "):
+            continue
+        title = s[2:].strip()
+        if title:
+            return title
+    return ""
+
+
 def _build_data_consistency_debug(raw_output: dict, normalized: dict) -> dict:
     prompt_data = raw_output.get("promptData") or {}
     report_type = normalized.get("reportType")
@@ -793,11 +804,11 @@ def register_routes(app):
     def export_template_preview_docx():
         payload = request.get_json() or {}
         template_config = payload.get("template_config") or {}
-        report_title = (payload.get("report_title") or "").strip() or "模板预览"
+        report_title = (payload.get("report_title") or "").strip() or "2026Q1 销售分析报告"
         report_markdown = (payload.get("report_markdown") or "").strip()
 
         if not report_markdown:
-            report_markdown = "# 模板预览\n\n这是一段正文预览。"
+            report_markdown = "# 一、概览\n这是一段正文预览。"
 
         if not isinstance(template_config, dict) or not template_config:
             return jsonify({"message": "template_config 不能为空"}), 400
@@ -823,7 +834,7 @@ def register_routes(app):
         markdown_text = (payload.get("report_markdown") or "").strip()
         template_id = payload.get("template_id") or "cn_management_a4"
         template_config = payload.get("template_config")
-        report_title = (payload.get("report_title") or "").strip() or "数据分析报告"
+        report_title = (payload.get("report_title") or "").strip()
 
         plot_images = payload.get("plot_images") or {}
         plot_images_meta = payload.get("plot_images_meta") or {}
@@ -845,6 +856,8 @@ def register_routes(app):
 
         if not markdown_text:
             return jsonify({"message": "report_markdown 不能为空"}), 400
+
+        report_title = report_title or _extract_title_from_markdown(markdown_text) or "数据分析报告"
 
         try:
             markdown_text, inject_debug = inject_placeholders_by_sections(

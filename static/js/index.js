@@ -362,7 +362,8 @@ createApp({
       }
 
       const templateId  = this.selectedTemplateId || 'cn_management_a4';
-      const reportTitle = (this.exportTitle || '').trim() || 'Chinook 数据分析报告';
+      const inferredTitle = this.extractReportTitleFromMarkdown(reportMarkdown);
+      const reportTitle = (this.exportTitle || '').trim() || inferredTitle || '数据分析报告';
       const useCustom   = this.useCustomTpl;
       const customCfg   = useCustom ? this.buildCustomTemplateConfig() : null;
 
@@ -446,6 +447,19 @@ createApp({
         return m.role === 'assistant' && (m.content || '').trim();
       });
       return last ? (last.content || '').trim() : '';
+    },
+
+    extractReportTitleFromMarkdown(markdown) {
+      const text = String(markdown || '').trim();
+      if (!text) return '';
+      const lines = text.split(/\r?\n/);
+      for (const line of lines) {
+        const s = line.replace(/^\s+/, '');
+        if (!s.startsWith('# ')) continue;
+        const title = s.slice(2).trim();
+        if (title) return title;
+      }
+      return '';
     },
 
     newSession() {

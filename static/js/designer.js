@@ -43,7 +43,21 @@ createApp({
       footer_pagenum: true, footer_total: false,
       footer_prefix: '第 ', footer_suffix: ' 页', footer_align: 'center',
 
-      preview_md: '# 一、概览\n本季度销售额同比增长 **12.8%**。\n\n# 二、维度分析\n## 流派\n- 摇滚与流行流派销售贡献最高\n- 经典流派复购表现稳定\n\n## 国家\n- 北美区域增长明显\n- 亚太区域潜力较高\n\n# 三、建议\n1. 深耕高增长区域\n2. 对低增长客户做分层运营',
+      preview_md: `# 一、概览
+本季度销售额同比增长 **12.8%**。
+
+# 二、维度分析
+## 流派
+- 摇滚与流行流派销售贡献最高
+- 经典流派复购表现稳定
+
+## 国家
+- 北美区域增长明显
+- 亚太区域潜力较高
+
+# 三、建议
+1. 深耕高增长区域
+2. 对低增长客户做分层运营`,
 
       autoPreview: false,
       statusMsg: '', statusOk: true, errorMsg: '',

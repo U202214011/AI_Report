@@ -2,6 +2,12 @@ const { createApp } = Vue;
 const PROMPT_TEXT_NOT_GENERATED = '尚未生成 Prompt';
 const PROMPT_TEXT_GENERATING = '生成中...';
 const PROMPT_TEXT_NOT_RETURNED = '未返回 prompt';
+const CONTEXT_WARN_RATIO = 0.80;
+const CONTEXT_DANGER_RATIO = 0.92;
+const CONTEXT_NOTICE_COOLDOWN_MS = 12000;
+const AUTO_COMPRESS_KEEP_RECENT = 8;
+const AUTO_COMPRESS_TRIGGER_RATIO = CONTEXT_WARN_RATIO;
+const AUTO_COMPRESS_SUMMARY_MAX_CHARS = 1400;
 
 createApp({
   delimiters: ['[[', ']]'],
@@ -37,8 +43,11 @@ createApp({
       cumulativeChars: 0,
       cumulativeTokens: 0,
       contextLimitTokens: 128000,
+      contextLevel: 'ok',
+      contextMessage: '上下文充足。',
       lastCtxCheckAt: 0,
       ctxCheckTimer: null,
+      lastCtxNoticeAt: 0,
 
       promptText: PROMPT_TEXT_NOT_GENERATED,
       plots: [],
@@ -80,6 +89,24 @@ createApp({
         return { flex: '0 0 ' + this.chatWidth + 'px' };
       }
       return { flex: '1' };
+    },
+    contextUsageRatio() {
+      const limit = Number(this.contextLimitTokens || 0);
+      if (!limit) return 0;
+      return Number(this.cumulativeTokens || 0) / limit;
+    },
+    contextUsagePercent() {
+      return (this.contextUsageRatio * 100).toFixed(1) + '%';
+    },
+    ctxBadgeClass() {
+      if (this.contextLevel === 'danger') return 'ctx-badge ctx-danger';
+      if (this.contextLevel === 'warn') return 'ctx-badge ctx-warn';
+      return 'ctx-badge ctx-ok';
+    },
+    ctxBadgeText() {
+      if (this.contextLevel === 'danger') return '高风险';
+      if (this.contextLevel === 'warn') return '预警';
+      return '正常';
     },
     showDeleteTplBtn() {
       return this.userTemplateIds.includes(this.selectedTemplateId);
@@ -130,6 +157,86 @@ createApp({
   },
 
   methods: {
+    pushSystemNotice(text) {
+      this.displayMessages.push({
+        id: this.nextMsgId++,
+        role: 'system',
+        kind: 'notice',
+        rawContent: text,
+      });
+      this.scrollChatToBottom();
+    },
+
+    applyContextStatus(payload, options) {
+      const cfg = options || {};
+      const shouldNotify = Boolean(cfg.notifyUser);
+      const now = Date.now();
+      const data = payload || {};
+
+      this.cumulativeChars = Number(data.cumulative_chars_est || 0);
+      this.cumulativeTokens = Number(data.cumulative_tokens_est || data.used_tokens_est || 0);
+      this.contextLimitTokens = Number(data.limit_tokens_est || 128000);
+
+      let level = String(data.level || '').trim();
+      if (!level) {
+        const ratio = this.contextUsageRatio;
+        if (ratio >= CONTEXT_DANGER_RATIO) level = 'danger';
+        else if (ratio >= CONTEXT_WARN_RATIO) level = 'warn';
+        else level = 'ok';
+      }
+      this.contextLevel = level;
+      this.contextMessage = String(data.message || '').trim()
+        || (level === 'danger'
+          ? '上下文接近极限，建议立即开启历史压缩或新建会话。'
+          : (level === 'warn' ? '上下文已较高，建议精简历史消息。' : '上下文充足。'));
+
+      if (!shouldNotify || level === 'ok') return;
+      if (now - this.lastCtxNoticeAt < CONTEXT_NOTICE_COOLDOWN_MS) return;
+      this.lastCtxNoticeAt = now;
+      this.pushSystemNotice('⚠️ ' + this.contextMessage);
+    },
+
+    shortenForSummary(text, maxLen) {
+      const clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return '';
+      const limit = Number(maxLen || 120);
+      if (clean.length <= limit) return clean;
+      return clean.slice(0, limit) + '…';
+    },
+
+    buildHistorySummary(historyMessages, maxChars) {
+      const lines = [];
+      const limit = Number(maxChars || AUTO_COMPRESS_SUMMARY_MAX_CHARS);
+      let used = 0;
+      for (const msg of historyMessages || []) {
+        const role = (msg && msg.role) === 'user' ? '用户' : '助手';
+        const content = this.shortenForSummary((msg && msg.content) || '', 120);
+        if (!content) continue;
+        const line = `- ${role}：${content}`;
+        if ((used + line.length) > limit) break;
+        lines.push(line);
+        used += line.length;
+      }
+      if (!lines.length) return '';
+      return '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：\n' + lines.join('\n');
+    },
+
+    async autoCompressHistoryIfNeeded() {
+      if (this.contextUsageRatio < AUTO_COMPRESS_TRIGGER_RATIO) return false;
+      if (!Array.isArray(this.llmMessages)) return false;
+      if (this.llmMessages.length <= AUTO_COMPRESS_KEEP_RECENT + 2) return false;
+
+      const keepRecent = this.llmMessages.slice(-AUTO_COMPRESS_KEEP_RECENT);
+      const toCompress = this.llmMessages.slice(0, -AUTO_COMPRESS_KEEP_RECENT);
+      const summary = this.buildHistorySummary(toCompress, AUTO_COMPRESS_SUMMARY_MAX_CHARS);
+      if (!summary) return false;
+
+      this.llmMessages = [{ role: 'assistant', content: summary }, ...keepRecent];
+      this.pushSystemNotice(`⚠️ 上下文较长，已自动压缩 ${toCompress.length} 条历史消息，并保留最近 ${AUTO_COMPRESS_KEEP_RECENT} 条。`);
+      await this.refreshCtxThrottled(true);
+      return true;
+    },
+
     escapeHtml(s) {
       return String(s || '')
         .replace(/&/g, '&amp;')
@@ -416,14 +523,16 @@ createApp({
           }),
         });
         const j = await res.json();
-        this.cumulativeChars = Number(j.cumulative_chars_est || 0);
-        this.cumulativeTokens = Number(j.cumulative_tokens_est || j.used_tokens_est || 0);
-        this.contextLimitTokens = Number(j.limit_tokens_est || 128000);
+        this.applyContextStatus(j, { notifyUser: false });
       } catch (e) {
         console.error('refreshCtx failed:', e);
-        this.cumulativeChars = 0;
-        this.cumulativeTokens = 0;
-        this.contextLimitTokens = 128000;
+        this.applyContextStatus({
+          cumulative_chars_est: 0,
+          cumulative_tokens_est: 0,
+          limit_tokens_est: 128000,
+          level: 'ok',
+          message: '上下文状态获取失败，已回退默认值。',
+        }, { notifyUser: false });
       }
     },
 
@@ -587,6 +696,7 @@ createApp({
     async runChatSSE(clientTrigger) {
       if (this.sending) return;
       this.sending = true;
+      await this.autoCompressHistoryIfNeeded();
 
       const reasoningId = this.nextMsgId++;
       const contentId   = this.nextMsgId++;
@@ -664,9 +774,7 @@ createApp({
             } else if (ev === 'content') {
               appendToMsg(contentId, obj.text || '');
             } else if (ev === 'context') {
-              this.cumulativeChars = Number(obj.cumulative_chars_est || 0);
-              this.cumulativeTokens = Number(obj.cumulative_tokens_est || obj.used_tokens_est || 0);
-              this.contextLimitTokens = Number(obj.limit_tokens_est || 128000);
+              this.applyContextStatus(obj, { notifyUser: true });
             } else if (ev === 'meta' && obj.status === 'done') {
               streamDone = true;
               tDone = performance.now();

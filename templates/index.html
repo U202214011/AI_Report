@@ -185,6 +185,11 @@
       <div class="panel-head">
         <strong>LLM 思考与响应（多轮对话）</strong>
       </div>
+      <div class="ctx-usage-line">
+        <span :class="ctxBadgeClass">[[ ctxBadgeText ]]</span>
+        <span class="ms-2">[[ cumulativeTokens ]] / [[ contextLimitTokens ]] tokens（[[ contextUsagePercent ]]）</span>
+        <span class="ms-2">[[ contextMessage ]]</span>
+      </div>
       <div class="chat-log" ref="chatLog">
         <div v-for="msg in displayMessages" :key="msg.id" :class="getMsgClass(msg)">
           <div v-if="msg.kind !== 'notice'" class="msg-role">[[ getMsgRoleLabel(msg) ]]</div>

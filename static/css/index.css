@@ -92,6 +92,18 @@ body {
 
 /* ---- Context badge — override Bootstrap colours ---- */
 .ctx-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+.ctx-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.ctx-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.ctx-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
 .ctx-usage-line {
   border-bottom: 1px solid var(--line);
   padding: 8px 12px;

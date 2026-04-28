@@ -19,7 +19,9 @@ function getMobileLayoutMaxWidth() {
       .getPropertyValue('--mobile-breakpoint');
     const parsed = parseFloat(cssValue);
     if (Number.isFinite(parsed)) return parsed;
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Failed to read mobile breakpoint:', e);
+  }
   return 991.98;
 }
 

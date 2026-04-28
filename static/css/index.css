@@ -411,7 +411,6 @@ body {
   .layout {
     flex-direction: column;
     height: auto;
-    min-height: 100dvh;
   }
 
   .col-config,

@@ -22,7 +22,7 @@ function getMobileLayoutMaxWidth() {
   } catch (e) {
     console.warn('Failed to read mobile breakpoint:', e);
   }
-  return 991.98;
+  return Number.POSITIVE_INFINITY;
 }
 
 createApp({

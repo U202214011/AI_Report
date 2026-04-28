@@ -407,6 +407,7 @@ body {
 .modal-loading { text-align: center; padding: 48px; color: var(--muted); }
 
 /* ---- Mobile responsive ---- */
+/* NOTE: Media queries currently cannot reliably consume CSS variables in all target browsers. */
 @media (max-width: 991.98px) {
   .layout {
     flex-direction: column;
@@ -423,10 +424,8 @@ body {
     border-bottom: 1px solid var(--line);
   }
 
-  .col-config { max-height: 46dvh; }
-  .col-chat { min-height: 38dvh; }
+  .col-chat { min-height: 300px; }
   .col-preview {
-    max-height: 38dvh;
     border-bottom: 0;
   }
 

@@ -35,7 +35,7 @@ body {
 }
 
 /* ---- 3-column flex layout ---- */
-.layout { display: flex; height: 100vh; }
+.layout { display: flex; height: 100vh; min-height: 100dvh; }
 
 .col {
   background: var(--panel);
@@ -400,3 +400,70 @@ body {
 
 .query-count { font-size: .78rem; color: var(--muted); margin-top: 6px; }
 .modal-loading { text-align: center; padding: 48px; color: var(--muted); }
+
+/* ---- Mobile responsive ---- */
+@media (max-width: 991.98px) {
+  .layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .col-config,
+  .col-chat,
+  .col-preview {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .col-config { max-height: 46dvh; }
+  .col-chat { min-height: 38dvh; }
+  .col-preview {
+    max-height: 38dvh;
+    border-bottom: 0;
+  }
+
+  .resizer { display: none; }
+
+  .panel-head {
+    min-height: 48px;
+    height: auto;
+    padding: 10px 12px;
+  }
+
+  .panel-head strong { font-size: 13px; }
+  .panel-body { padding: 12px; }
+
+  .row-inline {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .row-inline > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .composer-actions {
+    gap: 8px;
+    justify-content: stretch;
+  }
+
+  .composer-actions .btn { flex: 1 1 0; }
+
+  .modal-box {
+    width: 96vw;
+    max-height: 92vh;
+    border-radius: 12px;
+  }
+
+  .modal-head {
+    padding: 12px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .modal-body-scroll { padding: 12px; }
+}

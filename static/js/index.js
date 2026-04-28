@@ -13,6 +13,18 @@ const AUTO_COMPRESS_MIN_TOTAL_MESSAGES = AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRE
 const COMPRESSED_SUMMARY_MARKER = '[AUTO_COMPRESSED_HISTORY]';
 const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
 
+function getMobileLayoutMaxWidth() {
+  try {
+    const cssValue = window.getComputedStyle(document.documentElement)
+      .getPropertyValue('--mobile-breakpoint');
+    const parsed = parseFloat(cssValue);
+    if (Number.isFinite(parsed)) return parsed;
+  } catch (e) {
+    console.warn('Failed to read mobile breakpoint:', e);
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
 createApp({
   delimiters: ['[[', ']]'],
 
@@ -152,12 +164,15 @@ createApp({
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mouseup', this.onMouseUp);
     document.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('resize', this.onViewportResize);
+    this.onViewportResize();
   },
 
   beforeUnmount() {
     document.removeEventListener('mousemove', this.onMouseMove);
     document.removeEventListener('mouseup', this.onMouseUp);
     document.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('resize', this.onViewportResize);
   },
 
   methods: {
@@ -848,12 +863,14 @@ createApp({
 
     // ---- Resizer ----
     startResize(e) {
+      if (window.innerWidth <= getMobileLayoutMaxWidth()) return;
       this.isResizing = true;
       document.body.style.userSelect = 'none';
     },
 
     onMouseMove(e) {
       if (!this.isResizing) return;
+      if (window.innerWidth <= getMobileLayoutMaxWidth()) return;
       const layout = document.querySelector('.layout');
       if (!layout) return;
       const rect = layout.getBoundingClientRect();
@@ -872,6 +889,14 @@ createApp({
 
     onKeyDown(e) {
       if (e.key === 'Escape') this.showModal = false;
+    },
+
+    onViewportResize() {
+      if (window.innerWidth <= getMobileLayoutMaxWidth()) {
+        this.chatWidth = null;
+        this.isResizing = false;
+        document.body.style.userSelect = '';
+      }
     },
   },
 }).mount('#app');

@@ -1,128 +1,128 @@
-# 📊 AI Report Generator (基于 Chinook 数据库的 AI 报告自动生成系统)
+# AI_Report
 
-基于 **Chinook 数据库** 和 **智谱 GLM 大语言模型** 构建的智能化数据分析与报告自动生成系统。
-本项目旨在通过自然语言与大模型结合，自动分析底层业务数据（如音乐商店的销售、客户、库存等），并生成多维度的数据可视化图表及深度的 AI 洞察报告。
-
-### 🔗 核心依赖与资源链接
-- **Chinook 数据库源项目**: [https://github.com/lerocha/chinook-database](https://github.com/lerocha/chinook-database)
-- **智谱 GLM 模型官方开发文档**: [https://bigmodel.cn/dev/api#glm-4](https://bigmodel.cn/dev/api#glm-4)
-
-
-## 🌟 核心特性 (Key Features)
-
-- **🤖 智能分析 (AI-Powered)**：无缝集成智谱 GLM 模型（支持 GLM-4 及其各版本 API），将冰冷的数据转化为具备商业洞察的自然语言报告。
-- **📈 自动可视化 (Auto-Visualization)**：基于查询数据自动生成图表（支持前端动态渲染及后端 Matplotlib/Echarts 构建）。
-- **🗃️ 深度数据联动 (Database Integration)**：内嵌 Chinook 示例数据库（数字音乐商店），支持复杂的跨表 SQL 数据提取。
-- **📄 多格式导出**：提供将生成的分析结果直接导出为美观文档的能力（基于 `python-docx` 等模块）。
-- **🌐 友好的 Web 交互**：采用 Python Flask 构建轻量级 Web 后端，结合 HTML/CSS/JS 提供响应式的用户操作界面。
-
+基于 Chinook 数据库的大语言模型 AI 报告自动生成系统
 
 ---
 
-## 🛠️ 技术栈 (Tech Stack)
+## 项目结构
 
-### Backend (后端)
-- **Python 3.8+**
-- **Web 框架**: [Flask](https://flask.palletsprojects.com/)
-- **数据库**: MySQL (通过 `pymysql`, `mysql-connector-python`, `aiomysql`)
-- **数据处理与分析**: `pandas`
-- **AI 引擎**: 智谱大模型 SDK (`GLM-4.7`)
-
-### Frontend (前端)
-- HTML5, CSS3, JavaScript (原生与轻量级框架组合)
-- 可视化库: 支持数据图表动态渲染 (通过 `charts` 模块)
-
----
-
-## 📁 目录结构 (Directory Structure)
-
-项目采用清晰的 MVC/模块化结构，提升代码可维护性与复用性：
-
-```text
-├── app.py                      # Flask 应用入口与主配置
-├── routes.py                   # 路由控制器（API 端点与页面导航）
-├── config.py                   # 核心配置文件（数据库配置、API 密钥等）
-├── .env                        # 环境变量文件（请勿提交敏感信息）
-├── requirements.txt            # Python 依赖包列表
-├── database_indexes.sql        # 数据库索引优化脚本
-├── prompt_templates.json       # GLM 提示词模板配置 (基础版)
-├── prompt_templates_pro.json   # GLM 提示词模板配置 (进阶版)
-├── prompt_data.py              # 提示词数据处理模块
-├── models/                     # 数据库模型与实体层
-├── services/                   # 业务逻辑层（与大模型交互、数据聚合等）
-├── adapters/                   # 外部接口适配器层
-├── charts/                     # 图表生成与可视化逻辑
-├── templates/                  # 前端 HTML 模板目录
-└── static/                     # 静态资源目录 (CSS, JS, Images)
+```
+AI_Report/
+├── app.py                    # Flask 应用入口
+├── routes.py                 # 路由注册
+├── config.py                 # 配置
+├── requirements.txt          # Python 依赖
+├── prompt_templates.json     # Prompt 模板
+├── prompt_data.py
+├── adapters/                 # 适配器层
+├── models/                   # 数据模型
+├── services/                 # 业务逻辑层
+│   ├── report_service.py     # Chinook 查询与聚合能力
+│   └── prompting/            # Prompt 组装解耦层（契约/数据网关）
+├── charts/                   # 图表生成
+└── templates/                # Flask Jinja2 模板（前端页面）
+    ├── index.html            # 主工作台（Vue 3 + Bootstrap 5）
+    └── template_designer.html# 模板配置中心（Vue 3 + Bootstrap 5）
 ```
 
 ---
 
-## 🚀 快速开始 (Getting Started)
+## 前端框架说明
 
-### 1. 环境准备 (Prerequisites)
-- 安装 [Python 3.8+](https://www.python.org/downloads/)
-- 安装 [MySQL](https://www.mysql.com/) 数据库服务器
-- 获取 **智谱 AI API Key**，详见 [智谱 AI 开放平台接入指南](https://bigmodel.cn/dev/howuse/introduction)。
+前端使用 **Vue 3**（CDN 引入，无需构建工具）+ **Bootstrap 5**，所有依赖通过 CDN 加载，无需 npm / webpack。
 
-### 2. 克隆项目 (Clone Repository)
-```bash
-git clone https://github.com/U202214011/AI_Report.git
-cd AI_Report
+| 库 | 版本 | 引入方式 |
+|----|------|---------|
+| Vue 3 | latest | CDN (`vue.global.prod.js`) |
+| Bootstrap | 5.3.3 | CDN |
+| marked.js | latest | CDN（Markdown 渲染） |
+| jszip | latest | CDN（DOCX 预览） |
+| docx-preview | 0.3.2 | CDN（DOCX 预览） |
+
+> **注意**：Vue 模板定界符已改为 `[[ ]]`（而非默认的 `{{ }}`），以避免与 Flask/Jinja2 模板语法冲突。
+
+---
+
+## PyCharm 开发环境搭建
+
+### 1. 配置 Python 解释器
+
+在 PyCharm 中创建或使用已有的虚拟环境（推荐 Python 3.10+）：
+
+```
+文件 → 设置 → 项目 → Python 解释器 → 添加解释器 → 虚拟环境
 ```
 
-### 3. 安装依赖 (Install Dependencies)
-建议使用虚拟环境：
+### 2. 安装 Python 依赖
+
+在 PyCharm 内置终端或系统终端中执行：
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # Windows 环境使用 venv\Scripts\activate
+# 升级 pip（可选，推荐）
+pip install --upgrade pip
+
+# 安装全部项目依赖
 pip install -r requirements.txt
 ```
 
-### 4. 数据库初始化 (Database Setup)
-1. 下载并安装 [Chinook 数据库 MySQL 版本](https://github.com/lerocha/chinook-database/tree/master/ChinookDatabase/DataSources)。
-2. 在本地 MySQL 中新建数据库（如命名为 `chinook`），并导入官方提供的 `.sql` 脚本初始化表结构和数据。
-3. 运行本项目提供的索引优化脚本：
-```bash
-mysql -u root -p chinook < database_indexes.sql
+`requirements.txt` 包含以下依赖：
+
+```
+Flask
+pymysql
+mysql-connector-python
+zai-sdk
+python-dotenv
+matplotlib
+python-docx
+python-dateutil
+aiomysql
+pandas
 ```
 
-### 5. 环境变量配置 (Environment Configuration)
-在项目根目录创建或编辑 `.env` 文件，填入你的实际参数：
+如需单独安装，可逐条执行：
+
+```bash
+pip install Flask
+pip install pymysql
+pip install mysql-connector-python
+pip install zai-sdk
+pip install python-dotenv
+pip install matplotlib
+pip install python-docx
+pip install python-dateutil
+pip install aiomysql
+pip install pandas
+```
+
+### 3. 配置环境变量
+
+复制或新建 `.env` 文件并填入数据库等配置：
 
 ```env
-# Database Settings
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=chinook
-
-# Zhipu AI Settings
-ZHIPUAI_API_KEY=your_glm_api_key_here
+DATABASE_URL=mysql+pymysql://用户名:密码@主机:端口/chinook
+# 其他所需的 API Key 等
 ```
 
-### 6. 运行应用 (Run Application)
+### 4. 启动项目
+
+在 PyCharm 内置终端执行：
+
 ```bash
 python app.py
 ```
-> 服务器启动后，在浏览器访问 `http://127.0.0.1:5000` 即可进入系统。
 
----
+或直接在 PyCharm 中右键 `app.py` → **运行**。
 
-## 🧩 核心工作流设计 (How it Works)
+启动后访问：
+- 主工作台：http://localhost:5000/
+- 模板配置中心：http://localhost:5000/template-designer
 
-1. **模板选择**：系统读取 `prompt_templates_pro.json` 模板。
-2. **数据汇聚**：用户在 Web 端发起报告请求，后端依据请求路由至 `services` 层，执行 SQL 查询聚合 Chinook 数据库中的业务指标。
-3. **Prompt 注入**：将结构化指标 (`prompt_data.py`) 和业务上下文组合，并根据 [智谱 GLM API 文档规范](https://bigmodel.cn/dev/api) 输入给大模型。
-4. **生成与排版**：获取大模型的深度推理文本，并利用 `charts` 层生成配套图表，最终在 `templates` 渲染呈现。
+### 5. PyCharm 前端支持（可选）
 
----
+PyCharm Professional 内置 Vue.js / Bootstrap 支持，无需额外安装插件。
 
-## 🤝 贡献指南 (Contributing)
-欢迎对本项目提出改进建议！如果您发现任何 Bug 或有新功能想法，请通过 [Issue](https://github.com/U202214011/AI_Report/issues) 进行反馈，或直接提交 Pull Request。
+如使用 PyCharm Community 版，可安装以下插件获得语法高亮：
+- **Vue.js**（JetBrains 官方）
 
-## 📜 许可证 (License)
-本项目开源，使用时请遵守相关依赖库及第三方平台的使用协议：
-- [Chinook Database License](https://github.com/lerocha/chinook-database/blob/master/LICENSE.md)
-- [智谱大模型服务条款](https://open.bigmodel.cn/dev/howuse/service-terms)
+> 由于前端通过 CDN 引入，**无需安装 Node.js、npm 或任何前端构建工具**，直接运行 Flask 即可。

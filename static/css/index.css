@@ -23,6 +23,7 @@
   --radius-md: 12px;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, .06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, .10);
+  --mobile-breakpoint: 991.98px;
 }
 
 * { box-sizing: border-box; }
@@ -35,7 +36,11 @@ body {
 }
 
 /* ---- 3-column flex layout ---- */
-.layout { display: flex; height: 100vh; }
+.layout { display: flex; min-height: 100vh; }
+
+@supports (height: 100dvh) {
+  .layout { min-height: 100dvh; }
+}
 
 .col {
   background: var(--panel);
@@ -400,3 +405,68 @@ body {
 
 .query-count { font-size: .78rem; color: var(--muted); margin-top: 6px; }
 .modal-loading { text-align: center; padding: 48px; color: var(--muted); }
+
+/* ---- Mobile responsive ---- */
+/* NOTE: Media queries currently cannot reliably consume CSS variables in all target browsers. */
+@media (max-width: 991.98px) {
+  .layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .col-config,
+  .col-chat,
+  .col-preview {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .col-chat { min-height: 300px; }
+  .col-preview {
+    border-bottom: 0;
+  }
+
+  .resizer { display: none; }
+
+  .panel-head {
+    min-height: 48px;
+    height: auto;
+    padding: 10px 12px;
+  }
+
+  .panel-head strong { font-size: 13px; }
+  .panel-body { padding: 12px; }
+
+  .row-inline {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .row-inline > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .composer-actions {
+    gap: 8px;
+    justify-content: stretch;
+  }
+
+  .composer-actions .btn { flex: 1 1 0; }
+
+  .modal-box {
+    width: 96vw;
+    max-height: 92vh;
+    border-radius: 12px;
+  }
+
+  .modal-head {
+    padding: 12px;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .modal-body-scroll { padding: 12px; }
+}

@@ -12,6 +12,7 @@ const AUTO_COMPRESS_MIN_EXCESS_MESSAGES = 2;
 const AUTO_COMPRESS_MIN_TOTAL_MESSAGES = AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES;
 const COMPRESSED_SUMMARY_MARKER = '[AUTO_COMPRESSED_HISTORY]';
 const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
+const MOBILE_LAYOUT_MAX_WIDTH = 991.98;
 
 createApp({
   delimiters: ['[[', ']]'],
@@ -851,14 +852,14 @@ createApp({
 
     // ---- Resizer ----
     startResize(e) {
-      if (window.innerWidth <= 991) return;
+      if (window.innerWidth <= MOBILE_LAYOUT_MAX_WIDTH) return;
       this.isResizing = true;
       document.body.style.userSelect = 'none';
     },
 
     onMouseMove(e) {
       if (!this.isResizing) return;
-      if (window.innerWidth <= 991) return;
+      if (window.innerWidth <= MOBILE_LAYOUT_MAX_WIDTH) return;
       const layout = document.querySelector('.layout');
       if (!layout) return;
       const rect = layout.getBoundingClientRect();
@@ -880,7 +881,7 @@ createApp({
     },
 
     onViewportResize() {
-      if (window.innerWidth <= 991) {
+      if (window.innerWidth <= MOBILE_LAYOUT_MAX_WIDTH) {
         this.chatWidth = null;
         this.isResizing = false;
         document.body.style.userSelect = '';

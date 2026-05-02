@@ -142,7 +142,7 @@ createApp({
         '👋 欢迎使用 Chinook 报告对话工作台\n\n' +
         '**使用步骤：**\n' +
         '1️⃣ 左侧配置报告参数\n' +
-        '2️⃣ 点击"生成Prompt与图像"\n' +
+        '2️⃣ 点击"生成Prompt"\n' +
         '3️⃣ 点击"开始报告生成"\n' +
         '4️⃣ 可继续追问，实现多轮对话',
     });
@@ -614,7 +614,7 @@ createApp({
         id: this.nextMsgId++,
         role: 'system',
         kind: 'notice',
-        rawContent: '✨ 新对话已创建，请先点击"生成Prompt与图像"，再点击"开始报告生成"',
+        rawContent: '✨ 新对话已创建，请先点击"生成Prompt"，再点击"开始报告生成"',
       });
       this.scrollChatToBottom();
       this.refreshCtxThrottled(true);
@@ -627,7 +627,7 @@ createApp({
       this.hasPendingGeneratedPrompt = false;
 
       try {
-        const res = await fetch('/api/generate?debug=1', {
+        const res = await fetch('/api/prompt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(p),
@@ -648,7 +648,7 @@ createApp({
         }
 
         const promptText = (j.finalPrompt || j.prompt || '').trim();
-        this.plots = j.plots || [];
+        this.plots = [];
 
         if (!promptText) {
           this.promptText = PROMPT_TEXT_NOT_RETURNED;
@@ -669,7 +669,7 @@ createApp({
           id: this.nextMsgId++,
           role: 'system',
           kind: 'notice',
-          rawContent: '✅ 已生成 Prompt 与图像，请点击"开始报告生成"。',
+          rawContent: '✅ 已生成 Prompt，请点击"开始报告生成"。',
         });
         this.scrollChatToBottom();
       } catch (e) {
@@ -693,7 +693,7 @@ createApp({
           id: this.nextMsgId++,
           role: 'system',
           kind: 'notice',
-          rawContent: '⚠️ 请先点击"生成Prompt与图像"。',
+          rawContent: '⚠️ 请先点击"生成Prompt"。',
         });
         this.scrollChatToBottom();
         return;

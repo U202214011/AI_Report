@@ -9,6 +9,7 @@ import io
 import base64
 import logging
 import platform
+from threading import Lock
 from functools import lru_cache
 from config import DB_CONFIG
 
@@ -40,6 +41,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _connection_pool = None
+_pool_lock = Lock()
 
 
 def get_db_connection():
@@ -48,18 +50,21 @@ def get_db_connection():
     retry_count = 0
     while retry_count < max_retries:
         try:
-            if _connection_pool is None:
-                from mysql.connector.pooling import MySQLConnectionPool
-                _connection_pool = MySQLConnectionPool(
-                    pool_name="mypool",
-                    pool_size=5,
-                    **DB_CONFIG
-                )
-            conn = _connection_pool.get_connection()
+            with _pool_lock:
+                if _connection_pool is None:
+                    from mysql.connector.pooling import MySQLConnectionPool
+                    _connection_pool = MySQLConnectionPool(
+                        pool_name="mypool",
+                        pool_size=5,
+                        **DB_CONFIG
+                    )
+                conn = _connection_pool.get_connection()
             return conn
-        except Error as e:
+        except (Error, OSError, ValueError) as e:
             retry_count += 1
             logger.error(f"数据库连接失败 (尝试 {retry_count}/{max_retries}): {e}")
+            with _pool_lock:
+                _connection_pool = None
             if retry_count == max_retries:
                 return None
 

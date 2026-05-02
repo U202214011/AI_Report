@@ -60,6 +60,13 @@ def get_db_connection():
         except Error as e:
             retry_count += 1
             logger.error(f"数据库连接失败 (尝试 {retry_count}/{max_retries}): {e}")
+            _connection_pool = None
+            if retry_count == max_retries:
+                return None
+        except Exception as e:
+            retry_count += 1
+            logger.error(f"数据库连接异常 (尝试 {retry_count}/{max_retries}): {e}")
+            _connection_pool = None
             if retry_count == max_retries:
                 return None
 

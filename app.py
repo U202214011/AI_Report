@@ -1,6 +1,7 @@
 from flask import Flask
 from routes import register_routes
 import os
+from models.db_init import ensure_indexes
 
 
 def create_app():
@@ -16,6 +17,9 @@ def create_app():
         app.json.ensure_ascii = False  # Flask 2.3.0+
     except AttributeError:
         app.config['JSON_AS_ASCII'] = False  # 旧版本
+
+    # 应用启动时执行索引自检（幂等，不阻断启动）
+    ensure_indexes()
 
     register_routes(app)
     return app

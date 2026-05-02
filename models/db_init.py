@@ -40,7 +40,7 @@ def ensure_indexes() -> bool:
     except Error as exc:
         logger.warning("索引自检/创建失败，不阻断服务启动: %s", exc)
         return False
-    except Exception as exc:
+    except OSError as exc:
         logger.warning("索引自检/创建失败，不阻断服务启动: %s", exc)
         return False
     finally:

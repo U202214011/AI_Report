@@ -21,8 +21,9 @@ def fetch_total_series(
 
 def aggregate_total_metric(metric: str, granularity: str, since: Optional[str], until: Optional[str]) -> List[Dict[str, Any]]:
     return run_aggregation({
+        "reportType": "statistical",
         "metric": metric,
-        "groupBy": [],
+        "dimensions": [],
         "timeGranularity": granularity,
         "since": since,
         "until": until,
@@ -31,8 +32,9 @@ def aggregate_total_metric(metric: str, granularity: str, since: Optional[str], 
 
 def aggregate_dimension_metric(metric: str, dim: str, since: Optional[str], until: Optional[str]) -> List[Dict[str, Any]]:
     return run_aggregation({
+        "reportType": "statistical",
         "metric": metric,
-        "groupBy": [dim],
+        "dimensions": [dim],
         "since": since,
         "until": until,
     })

@@ -47,6 +47,9 @@ DIMENSION_TITLES = get_dimension_title_map(include_total=True)
 
 SHOW_BAR_IN_TREND = True
 SHOW_PIE_IN_STAT = True
+MAX_GENERATE_PLOTS = 24
+MAX_EXPORT_PLOT_IMAGES = 24
+MAX_EXPORT_PLOT_IMAGE_BASE64_CHARS = 3000000
 
 MODEL_CONTEXT_LIMIT = 128000
 CONTEXT_WARN_RATIO = 0.80
@@ -57,6 +60,25 @@ _UNRESOLVED_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 
 def _has_unresolved_placeholders(text: str) -> bool:
     return bool(_UNRESOLVED_PLACEHOLDER_RE.search(text or ""))
+
+
+def _sanitize_plot_images(plot_images: dict, *, max_count: int, max_image_chars: int) -> tuple[dict, str | None]:
+    if not isinstance(plot_images, dict):
+        return {}, None
+    if len(plot_images) > max_count:
+        return {}, f"图像数量超限（最多 {max_count} 张）"
+    out = {}
+    for key, value in plot_images.items():
+        key_text = str(key or "").strip()
+        if not key_text:
+            continue
+        image_text = str(value or "").strip()
+        if not image_text:
+            continue
+        if len(image_text) > max_image_chars:
+            return {}, f"图像体积超限（单张最多 {max_image_chars} 字符），请缩小图表后重试"
+        out[key_text] = image_text
+    return out, None
 
 
 def _safe_float(v):
@@ -663,6 +685,23 @@ def register_routes(app):
                         ))
                     data.extend(rows)
 
+            filtered_plots = []
+            for p in plots:
+                image = str((p or {}).get("image") or "")
+                if image and len(image) > MAX_EXPORT_PLOT_IMAGE_BASE64_CHARS:
+                    logger.warning(
+                        "[/api/generate] drop oversized chart image title=%s size=%s",
+                        (p or {}).get("title"),
+                        len(image)
+                    )
+                    continue
+                filtered_plots.append(p)
+            plots = filtered_plots
+
+            if len(plots) > MAX_GENERATE_PLOTS:
+                logger.warning("[/api/generate] too many plots=%s, truncate_to=%s", len(plots), MAX_GENERATE_PLOTS)
+                plots = plots[:MAX_GENERATE_PLOTS]
+
             prompt_bundle = build_prompt_bundle(normalized, plots=plots)
 
             raw_output = {
@@ -847,6 +886,7 @@ def register_routes(app):
 
         plot_images = payload.get("plot_images") or {}
         plot_images_meta = payload.get("plot_images_meta") or {}
+        images_expected = bool(payload.get("images_expected"))
 
         plots_payload = payload.get("plots") or []
         built_plot_images = {}
@@ -859,6 +899,16 @@ def register_routes(app):
             plot_images = built_plot_images
         if not plot_images_meta and built_plot_images_meta:
             plot_images_meta = built_plot_images_meta
+
+        plot_images, sanitize_error = _sanitize_plot_images(
+            plot_images,
+            max_count=MAX_EXPORT_PLOT_IMAGES,
+            max_image_chars=MAX_EXPORT_PLOT_IMAGE_BASE64_CHARS,
+        )
+        if sanitize_error:
+            return jsonify({"message": sanitize_error}), 400
+        if images_expected and not plot_images:
+            return jsonify({"message": "图像缓存已释放，请重新点击“生成Prompt与图像”后再导出。"}), 400
 
         selected_dim_keys = payload.get("selected_dimensions") or payload.get("dimensions") or []
         selected_dimensions = build_selected_dimensions(selected_dim_keys)

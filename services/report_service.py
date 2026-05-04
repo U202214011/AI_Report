@@ -285,10 +285,11 @@ def build_dimension_trend(metric: str, granularity: str, dimension: str, since=N
 
 
 # ---------- 图表工具 ----------
+CHART_DPI = 110
 
 def _encode_png(fig) -> str:
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight')
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=CHART_DPI)
     plt.close(fig)
     buf.seek(0)
     data = buf.read()
@@ -361,7 +362,7 @@ def format_value(value: Any) -> str:
 
 
 def generate_line_chart(series: List[Dict[str, Any]], granularity: str, y_label: str = "value") -> str:
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=CHART_DPI)
 
     # 使用ECharts风格的配色
     colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
@@ -446,7 +447,7 @@ def generate_grouped_bar_chart(
         value = float(r.get("value") or 0)
         values_map.setdefault(dim_val, {})[period_val] = value
 
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=CHART_DPI)
     x = np.arange(len(periods))
     count = max(len(categories), 1)
     width = 0.8 / count
@@ -661,7 +662,7 @@ def build_total_series(
 
 
 def generate_pie_chart(labels: List[str], values: List[float]) -> str:
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=CHART_DPI)
 
     # 使用ECharts风格的配色
     colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']

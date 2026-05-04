@@ -177,6 +177,11 @@
             [[ exporting ? '导出中...' : '导出 DOCX' ]]
           </button>
         </div>
+        <div class="row-inline mt-2">
+          <button class="btn btn-outline-danger btn-sm w-100" @click="handleReleasePlotMemory">
+            释放图像内存
+          </button>
+        </div>
 
       </div><!-- /panel-body config -->
     </aside>
@@ -222,7 +227,7 @@
           <template v-else>
             <div v-for="(plot, i) in plots" :key="i">
               <h4 class="mb-1" style="font-size:.95rem;">[[ plot.title ]]</h4>
-              <img :src="'data:image/png;base64,' + plot.image" class="img-fluid border rounded mb-2">
+              <img :src="plot.previewUrl" class="img-fluid border rounded mb-2">
             </div>
           </template>
         </div>

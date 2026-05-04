@@ -76,7 +76,8 @@ def _sanitize_plot_images(plot_images: dict, *, max_count: int, max_image_chars:
         if not image_text:
             continue
         if len(image_text) > max_image_chars:
-            return {}, f"图像体积超限（单张最多 {max_image_chars} 字符），请缩小图表后重试"
+            limit_mb = max_image_chars / 1024 / 1024
+            return {}, f"图像体积超限（单张最多约 {limit_mb:.1f}MB），请缩小图表后重试"
         out[key_text] = image_text
     return out, None
 

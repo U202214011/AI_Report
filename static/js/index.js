@@ -411,7 +411,7 @@ createApp({
         });
       });
       if (droppedLarge > 0) {
-        this.pushSystemNotice(`⚠️ 已跳过 ${droppedLarge} 张过大图像，避免内存占满。`);
+        this.pushSystemNotice(`⚠️ 已跳过 ${droppedLarge} 张过大图像（单张上限约 ${(MAX_PLOT_IMAGE_BASE64_CHARS / 1024 / 1024).toFixed(1)}MB）。`);
       }
       if (droppedInvalid > 0) {
         this.pushSystemNotice(`⚠️ 已跳过 ${droppedInvalid} 张无效图像。`);
@@ -422,7 +422,6 @@ createApp({
     releasePlotMemory(options = {}) {
       const cfg = options || {};
       const notify = Boolean(cfg.notify);
-      (this.plots || []).forEach(p => this.revokePlotPreviewUrl(p.previewUrl));
       if (this._plotPreviewUrls instanceof Set) {
         this._plotPreviewUrls.forEach(url => this.revokePlotPreviewUrl(url));
         this._plotPreviewUrls.clear();

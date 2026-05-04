@@ -12,6 +12,9 @@ const AUTO_COMPRESS_MIN_EXCESS_MESSAGES = 2;
 const AUTO_COMPRESS_MIN_TOTAL_MESSAGES = AUTO_COMPRESS_KEEP_RECENT + AUTO_COMPRESS_MIN_EXCESS_MESSAGES;
 const COMPRESSED_SUMMARY_MARKER = '[AUTO_COMPRESSED_HISTORY]';
 const AUTO_COMPRESS_SUMMARY_PREFIX = '以下为早期多轮对话压缩摘要，请基于该摘要与后续消息保持回答连续性：';
+const MAX_PLOT_CACHE_ITEMS = 24;
+const MAX_PLOT_IMAGE_BASE64_CHARS = 3000000;
+const KEEP_PLOT_IMAGES_AFTER_EXPORT = false;
 
 function getMobileLayoutMaxWidth() {
   try {
@@ -150,6 +153,15 @@ createApp({
     await this.loadExportTemplates();
     await this.refreshCtxThrottled(true);
 
+    this._plotImageCache = new Map();
+    this._plotImageOrder = [];
+    this._plotPreviewUrls = new Set();
+
+    this._onBeforeUnload = () => {
+      this.releasePlotMemory({ notify: false });
+    };
+    window.addEventListener('beforeunload', this._onBeforeUnload);
+
     window.addEventListener('focus', () => this.loadExportTemplates());
     window.addEventListener('storage', (e) => {
       if (e.key === 'tpl_saved') this.loadExportTemplates();
@@ -173,6 +185,10 @@ createApp({
     document.removeEventListener('mouseup', this.onMouseUp);
     document.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('resize', this.onViewportResize);
+    if (this._onBeforeUnload) {
+      window.removeEventListener('beforeunload', this._onBeforeUnload);
+    }
+    this.releasePlotMemory({ notify: false });
   },
 
   methods: {
@@ -304,11 +320,128 @@ createApp({
         .slice(0, 64);
     },
 
+    normalizeBase64Image(raw) {
+      const text = String(raw || '').trim();
+      if (!text) return '';
+      const b64 = (text.includes(',') && text.split(',')[0].includes('base64'))
+        ? text.split(',', 2)[1]
+        : text;
+      return b64.replace(/\s+/g, '');
+    },
+
+    toObjectUrlFromBase64(imageBase64) {
+      const b64 = this.normalizeBase64Image(imageBase64);
+      if (!b64) return '';
+      try {
+        const binary = atob(b64);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'image/png' });
+        return URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn('failed to convert base64 to object url:', e);
+        return '';
+      }
+    },
+
+    revokePlotPreviewUrl(url) {
+      if (!url) return;
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.warn('failed to revoke object url:', e);
+      }
+      if (this._plotPreviewUrls) this._plotPreviewUrls.delete(url);
+    },
+
+    enforcePlotCacheLimit() {
+      if (!Array.isArray(this._plotImageOrder) || !(this._plotImageCache instanceof Map)) return;
+      while (this._plotImageOrder.length > MAX_PLOT_CACHE_ITEMS) {
+        const oldest = this._plotImageOrder.shift();
+        if (!oldest) continue;
+        this._plotImageCache.delete(oldest);
+      }
+    },
+
+    cachePlotImage(imageKey, imageBase64) {
+      if (!imageKey || !(this._plotImageCache instanceof Map)) return false;
+      const clean = this.normalizeBase64Image(imageBase64);
+      if (!clean) return false;
+      if (clean.length > MAX_PLOT_IMAGE_BASE64_CHARS) return false;
+      this._plotImageCache.set(imageKey, clean);
+      this._plotImageOrder = (this._plotImageOrder || []).filter(k => k !== imageKey);
+      this._plotImageOrder.push(imageKey);
+      this.enforcePlotCacheLimit();
+      return true;
+    },
+
+    getCachedPlotImage(imageKey) {
+      if (!imageKey || !(this._plotImageCache instanceof Map)) return '';
+      return this._plotImageCache.get(imageKey) || '';
+    },
+
+    buildLightweightPlots(plots) {
+      const descriptors = [];
+      let droppedLarge = 0;
+      let droppedInvalid = 0;
+      (plots || []).forEach((p, idx) => {
+        const keyBase = this.slugifyKey(p.title || ('chart_' + (idx + 1)));
+        const imageKey = `${keyBase}__${idx + 1}`;
+        const image = this.normalizeBase64Image(p.image);
+        const cached = this.cachePlotImage(imageKey, image);
+        if (!cached) {
+          if (image && image.length > MAX_PLOT_IMAGE_BASE64_CHARS) droppedLarge += 1;
+          else droppedInvalid += 1;
+          return;
+        }
+        const previewUrl = this.toObjectUrlFromBase64(image);
+        if (!previewUrl) {
+          this._plotImageCache.delete(imageKey);
+          this._plotImageOrder = (this._plotImageOrder || []).filter(k => k !== imageKey);
+          droppedInvalid += 1;
+          return;
+        }
+        this._plotPreviewUrls.add(previewUrl);
+        descriptors.push({
+          title: p.title || ('图表 ' + (idx + 1)),
+          imageKey,
+          previewUrl,
+          meta: p.meta || {},
+        });
+      });
+      if (droppedLarge > 0) {
+        this.pushSystemNotice(`⚠️ 已跳过 ${droppedLarge} 张过大图像（单张上限约 ${(MAX_PLOT_IMAGE_BASE64_CHARS / 1024 / 1024).toFixed(1)}MB）。`);
+      }
+      if (droppedInvalid > 0) {
+        this.pushSystemNotice(`⚠️ 已跳过 ${droppedInvalid} 张无效图像。`);
+      }
+      return descriptors;
+    },
+
+    releasePlotMemory(options = {}) {
+      const cfg = options || {};
+      const notify = Boolean(cfg.notify);
+      if (this._plotPreviewUrls instanceof Set) {
+        this._plotPreviewUrls.forEach(url => this.revokePlotPreviewUrl(url));
+        this._plotPreviewUrls.clear();
+      }
+      this.plots = [];
+      if (this._plotImageCache instanceof Map) this._plotImageCache.clear();
+      this._plotImageOrder = [];
+      if (notify) {
+        this.pushSystemNotice('🧹 已释放图像内存；如需导出，请重新点击“生成Prompt与图像”。');
+      }
+    },
+
     buildPlotImages(plots) {
       const map = {};
       (plots || []).forEach(p => {
-        const key = this.slugifyKey(p.title);
-        if (p.image) map[key] = p.image;
+        if (!p || !p.imageKey) return;
+        const image = this.getCachedPlotImage(p.imageKey);
+        if (!image) return;
+        const key = this.slugifyKey(p.title || p.imageKey);
+        map[key] = image;
       });
       return map;
     },
@@ -316,8 +449,11 @@ createApp({
     buildPlotImagesMeta(plots) {
       const map = {};
       (plots || []).forEach(p => {
-        const key = this.slugifyKey(p.title);
-        if (p.image && p.meta) map[key] = p.meta;
+        if (!p || !p.imageKey || !p.meta) return;
+        const image = this.getCachedPlotImage(p.imageKey);
+        if (!image) return;
+        const key = this.slugifyKey(p.title || p.imageKey);
+        map[key] = p.meta;
       });
       return map;
     },
@@ -507,6 +643,13 @@ createApp({
 
       this.exporting = true;
       try {
+        const plotImages = this.buildPlotImages(this.plots);
+        const plotImagesMeta = this.buildPlotImagesMeta(this.plots);
+        if ((this.plots || []).length > 0 && Object.keys(plotImages).length === 0) {
+          alert('图像缓存已释放，请重新点击“生成Prompt与图像”后再导出。');
+          return;
+        }
+
         const res = await fetch('/api/export/report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -515,8 +658,9 @@ createApp({
             template_id:        useCustom ? null : templateId,
             template_config:    customCfg,
             report_title:       reportTitle,
-            plot_images:        this.buildPlotImages(this.plots),
-            plot_images_meta:   this.buildPlotImagesMeta(this.plots),
+            plot_images:        plotImages,
+            plot_images_meta:   plotImagesMeta,
+            images_expected:    (this.plots || []).length > 0,
             selected_dimensions: this.selectedDimensions,
           }),
         });
@@ -539,6 +683,9 @@ createApp({
         a.href = url; a.download = filename;
         document.body.appendChild(a); a.click(); a.remove();
         URL.revokeObjectURL(url);
+        if (!KEEP_PLOT_IMAGES_AFTER_EXPORT) {
+          this.releasePlotMemory({ notify: true });
+        }
       } catch (e) {
         alert('导出失败: ' + (e.message || e));
       } finally {
@@ -604,10 +751,10 @@ createApp({
     },
 
     newSession() {
+      this.releasePlotMemory({ notify: false });
       this.llmMessages    = [];
       this.displayMessages = [];
       this.chatInput      = '';
-      this.plots          = [];
       this.promptText     = PROMPT_TEXT_NOT_GENERATED;
       this.hasPendingGeneratedPrompt = false;
       this.displayMessages.push({
@@ -622,7 +769,7 @@ createApp({
 
     async handleGeneratePrompt() {
       const p = this.getPayload();
-      this.plots = [];
+      this.releasePlotMemory({ notify: false });
       this.promptText = PROMPT_TEXT_GENERATING;
       this.hasPendingGeneratedPrompt = false;
 
@@ -648,7 +795,7 @@ createApp({
         }
 
         const promptText = (j.finalPrompt || j.prompt || '').trim();
-        this.plots = j.plots || [];
+        this.plots = this.buildLightweightPlots(j.plots || []);
 
         if (!promptText) {
           this.promptText = PROMPT_TEXT_NOT_RETURNED;
@@ -897,6 +1044,10 @@ createApp({
         this.isResizing = false;
         document.body.style.userSelect = '';
       }
+    },
+
+    handleReleasePlotMemory() {
+      this.releasePlotMemory({ notify: true });
     },
   },
 }).mount('#app');

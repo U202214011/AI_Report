@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional
 import json
 import os
 import re
+import logging
 import numpy as np
 from decimal import Decimal
 from datetime import datetime
@@ -21,6 +22,8 @@ from services.prompting import (
     pick_top_categories,
 )
 from models.schema_config import METRICS, DIMENSIONS, ROLE_CONTEXT
+
+logger = logging.getLogger(__name__)
 
 # ---------- 从 schema_config 动态生成映射字典 ----------
 METRIC_LABELS_CN    = {k: v["label_cn"] for k, v in METRICS.items()}
@@ -218,6 +221,7 @@ def render_template(template_text: str, payload: Dict[str, Any]) -> str:
     except Exception as e:
         _TEMPLATE_DEBUG_STATE["render_ok"] = False
         _TEMPLATE_DEBUG_STATE["render_error"] = repr(e)
+        logger.exception("[prompt_data] render_template failed")
         return template_text if isinstance(template_text, str) else str(template_text)
 
 
@@ -1013,6 +1017,17 @@ def build_prompt_bundle(normalized: Dict[str, Any], plots: Optional[List[Dict[st
     except Exception as e:
         _TEMPLATE_DEBUG_STATE["render_ok"] = False
         _TEMPLATE_DEBUG_STATE["render_error"] = repr(e)
+        context = {
+            "reportType": str((normalized or {}).get("reportType") or ""),
+            "reportStyle": str((normalized or {}).get("reportStyle") or ""),
+            "metric": str((normalized or {}).get("metric") or ""),
+            "dimensions": (normalized or {}).get("dimensions") or [],
+            "granularity": str((normalized or {}).get("granularity") or "")
+        }
+        logger.exception(
+            "[prompt_data] build_prompt_bundle failed | context=%s",
+            json.dumps(context, ensure_ascii=False, default=str)
+        )
         fallback_prompt = (
             "【角色与场景】\n"
             "你是一位资深数据分析师。\n\n"
